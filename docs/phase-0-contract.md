@@ -1,6 +1,6 @@
 # Phase 0 implementation contract
 
-Status: Settled for the GitHub foundation; website analytics provider approval remains pending.
+Status: Settled. The existing self-hosted Umami deployment is approved for bounded website analytics.
 
 ## Identity
 
@@ -26,7 +26,7 @@ Phase 0 is the signal-foundation program. v0.1 is its first runnable release.
 
 ### Deferred beyond v0.1
 
-- Website reach and CTA collection until Bailey approves an analytics provider and the event allowlist.
+- Website reach and CTA collection until the Umami aggregate adapter, event allowlist, and transmission validation are implemented.
 - Google Play, aggregate product-utilization telemetry, social/community connectors, and private work-management data.
 - Dashboards, configurable dashboard composition, saved views, alert-triage UI, or arbitrary presentation plugins.
 - Public report publishing, public replies, or any other public action execution.
@@ -65,18 +65,18 @@ The Observatory must not collect or derive:
 
 v0.1 stores only the GitHub fields needed to reproduce public metrics and evidence links. It does not duplicate issue/PR bodies or comments. GitHub traffic is retained only as aggregate counts exposed by GitHub.
 
-If website analytics is approved later, the event allowlist is limited to page views and named public CTA events. Event names and properties must be code-reviewed constants; free-form values, account identifiers, URLs with query strings, and product-derived properties are rejected.
+The approved Umami event allowlist is limited to page views and named public CTA events. Event names and properties must be code-reviewed constants; free-form values, account identifiers, URLs with query strings, and product-derived properties are rejected. The Observatory does not ingest Umami session, journey, retention, cohort, or visitor drill-down records.
 
 ## Retention defaults
 
-| Data class | Default | Rationale |
-| --- | ---: | --- |
-| Normalized GitHub observations, metric observations, checkpoints, provenance, annotations, briefing revisions | Indefinite | They are the durable historical record Phase 0 exists to preserve. |
-| Minimal raw GitHub response fragments required for replay | 90 days | Supports parser recovery without retaining redundant public content indefinitely. |
-| Collector diagnostics and redacted error details | 30 days | Enough for operating review while limiting incidental metadata. |
-| Database backups | 35 days | Bounded recovery window; restore tests remain required. |
-| Approved website aggregate page/CTA observations | 13 rolling months | Enables annual comparison without visitor-level history. |
-| Analytics-provider visitor/session drill-down | Not ingested | Outside the Observatory contract even if a provider exposes it. |
+| Data class                                                                                                    |           Default | Rationale                                                                         |
+| ------------------------------------------------------------------------------------------------------------- | ----------------: | --------------------------------------------------------------------------------- |
+| Normalized GitHub observations, metric observations, checkpoints, provenance, annotations, briefing revisions |        Indefinite | They are the durable historical record Phase 0 exists to preserve.                |
+| Minimal raw GitHub response fragments required for replay                                                     |           90 days | Supports parser recovery without retaining redundant public content indefinitely. |
+| Collector diagnostics and redacted error details                                                              |           30 days | Enough for operating review while limiting incidental metadata.                   |
+| Database backups                                                                                              |           35 days | Bounded recovery window; restore tests remain required.                           |
+| Approved website aggregate page/CTA observations                                                              | 13 rolling months | Enables annual comparison without visitor-level history.                          |
+| Analytics-provider visitor/session drill-down                                                                 |      Not ingested | Outside the Observatory contract even if a provider exposes it.                   |
 
 Retention jobs are idempotent and auditable. A configuration change may shorten retention, but extending it requires an explicit recorded decision.
 
@@ -96,4 +96,4 @@ All later motion must respect `prefers-reduced-motion`, remain functional rather
 
 ## Decision gates
 
-The GitHub collector and briefing work may proceed from this contract. Website instrumentation may proceed only after Bailey approves the provider, deployment mode, event allowlist, and 13-month aggregate retention. No release, deployment, or public report publication is authorized by this document.
+The GitHub collector and briefing work may proceed from this contract. The existing self-hosted Umami deployment is the approved provider; website instrumentation may proceed only after the event allowlist, query-string stripping, 13-month aggregate retention, privacy notice, and transmission validation are implemented and reviewed. No release, deployment, or public report publication is authorized by this document.
