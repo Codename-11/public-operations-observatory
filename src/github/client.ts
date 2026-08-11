@@ -45,7 +45,11 @@ export class GitHubClient {
         this.updateRateLimit(response.headers);
         if (response.ok) return (await response.json()) as T;
 
-        const retryable = response.status === 429 || response.status >= 500;
+        const rateLimited =
+          response.status === 403 &&
+          (response.headers.has('retry-after') ||
+            response.headers.get('x-ratelimit-remaining') === '0');
+        const retryable = rateLimited || response.status === 429 || response.status >= 500;
         if (retryable && attempt < 2) {
           await response.body?.cancel();
           await this.sleep(retryDelay(response, attempt));
@@ -88,7 +92,10 @@ export class GitHubClient {
 
 function retryDelay(response: Response, attempt: number): number {
   const retryAfter = parseInteger(response.headers.get('retry-after'));
-  return retryAfter === undefined ? 250 * 2 ** attempt : Math.min(retryAfter * 1_000, 5_000);
+  if (retryAfter !== undefined) return Math.min(retryAfter * 1_000, 5_000);
+  const reset = parseInteger(response.headers.get('x-ratelimit-reset'));
+  if (reset !== undefined) return Math.min(Math.max(reset * 1_000 - Date.now(), 0), 5_000);
+  return 250 * 2 ** attempt;
 }
 
 function parseInteger(value: string | null): number | undefined {

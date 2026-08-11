@@ -101,7 +101,7 @@ integration('PostgreSQL operating loop', () => {
       occurredAt: new Date('2026-08-09T11:00:00Z'),
       kind: 'communication',
       title: '[unsafe](https://invalid.example) <script>',
-      evidenceUrl: 'https://example.com/evidence',
+      evidenceUrl: 'https://example.com/evidence_(safe)',
     });
     await expect(
       addAnnotation(database, {
@@ -129,12 +129,12 @@ integration('PostgreSQL operating loop', () => {
     };
     const result = await generateWeeklyBriefing(database, briefingOptions);
     expect(result.markdown).toContain('| GitHub stars | 13 |');
-    expect(result.markdown).toContain('[source](https://github.com/test/example)');
+    expect(result.markdown).toContain('[source](<https://github.com/test/example>)');
     expect(result.markdown).toContain(
-      '[Example release](https://github.com/test/example/releases/tag/v1.0.0)',
+      '[Example release](<https://github.com/test/example/releases/tag/v1.0.0>)',
     );
     expect(result.markdown).toContain(
-      '[\\[unsafe\\]\\(https://invalid.example\\) &lt;script&gt;](https://example.com/evidence)',
+      '[\\[unsafe\\]\\(https://invalid.example\\) &lt;script&gt;](<https://example.com/evidence_(safe)>)',
     );
     expect(result.markdown).not.toContain('9,999');
 
@@ -143,6 +143,20 @@ integration('PostgreSQL operating loop', () => {
          (source, scope, status, started_at, finished_at, error_summary)
        VALUES ('github', $1, 'partial', $2, $2, 'future diagnostic')`,
       [scope, new Date('2026-08-13T00:00:00Z')],
+    );
+    await database.query(
+      `INSERT INTO observations
+         (source, scope, record_kind, external_id, observed_bucket, schema_version,
+          payload, payload_digest, evidence_url, collection_run_id, created_at)
+       VALUES ('github', $1, 'repository.summary', 'repository', $2, 1,
+         '{"stars":14,"forks":3}'::jsonb, 'late-backfill',
+         'https://github.com/test/example', $3, $4)`,
+      [
+        scope,
+        dayBucket(new Date('2026-08-10T12:00:00Z')),
+        changedRun.id,
+        new Date('2026-08-13T00:00:00Z'),
+      ],
     );
     const regenerated = await generateWeeklyBriefing(database, briefingOptions);
     expect(regenerated.digest).toBe(result.digest);
@@ -154,7 +168,7 @@ integration('PostgreSQL operating loop', () => {
       "SELECT count(*)::text AS count FROM observations WHERE source = 'github' AND scope = $1",
       [scope],
     );
-    expect(counts.rows[0]?.count).toBe('2');
+    expect(counts.rows[0]?.count).toBe('3');
   });
 
   it('prevents checkpoint regression and rejects scope mismatch', async () => {
@@ -170,6 +184,12 @@ integration('PostgreSQL operating loop', () => {
       },
       { status: 'succeeded' },
     );
+    await store.finishRun(newerRun.id, 'failed', {}, 'uncertain commit');
+    const completedRun = await database.query<{ status: string }>(
+      'SELECT status FROM collection_runs WHERE id = $1',
+      [newerRun.id],
+    );
+    expect(completedRun.rows[0]?.status).toBe('succeeded');
     const olderRun = await store.beginRun('github', scope);
     await store.persistBatch(
       olderRun,

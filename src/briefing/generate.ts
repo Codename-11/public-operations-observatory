@@ -57,6 +57,7 @@ export async function generateWeeklyBriefing(
        FROM observations
        WHERE source = 'github' AND scope = $1
          AND observed_bucket >= $2 AND observed_bucket < $3
+         AND created_at <= $3
        ORDER BY record_kind, external_id, observed_bucket, created_at DESC`,
       [options.scope, options.windowStart, options.windowEnd],
     ),
@@ -64,7 +65,8 @@ export async function generateWeeklyBriefing(
       `SELECT DISTINCT ON (record_kind, external_id)
          record_kind, external_id, observed_bucket, payload, evidence_url
        FROM observations
-       WHERE source = 'github' AND scope = $1 AND observed_bucket < $2
+       WHERE source = 'github' AND scope = $1
+         AND observed_bucket < $2 AND created_at <= $2
        ORDER BY record_kind, external_id, observed_bucket DESC, created_at DESC`,
       [options.scope, options.windowEnd],
     ),
@@ -72,9 +74,10 @@ export async function generateWeeklyBriefing(
       `SELECT DISTINCT ON (record_kind, external_id)
          record_kind, external_id, observed_bucket, payload, evidence_url
        FROM observations
-       WHERE source = 'github' AND scope = $1 AND observed_bucket < $2
+       WHERE source = 'github' AND scope = $1
+         AND observed_bucket < $2 AND created_at <= $3
        ORDER BY record_kind, external_id, observed_bucket DESC, created_at DESC`,
-      [options.scope, options.windowStart],
+      [options.scope, options.windowStart, options.windowEnd],
     ),
     database.query<RunRow>(
       `SELECT finished_at, status, error_summary
@@ -111,11 +114,12 @@ export async function generateWeeklyBriefing(
     [options.scope, options.windowStart, options.windowEnd, metricVersion, digest, markdown],
   );
 
-  await mkdir(options.outputDirectory, { recursive: true });
-  const outputPath = path.join(
+  const outputPath = resolveBriefingOutputPath(
     options.outputDirectory,
-    `${options.scope.replace('/', '-')}-${formatDate(options.windowEnd)}.md`,
+    options.scope,
+    options.windowEnd,
   );
+  await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, markdown, 'utf8');
   return { digest, markdown, outputPath };
 }
@@ -206,7 +210,7 @@ function renderBriefing(
         ]
       : annotations.map((annotation) => {
           const note = annotation.note ? ` — ${escapeMarkdown(annotation.note)}` : '';
-          return `- ${formatDate(annotation.occurred_at)} · ${annotation.kind} · [${escapeMarkdown(annotation.title)}](${annotation.evidence_url})${note}`;
+          return `- ${formatDate(annotation.occurred_at)} · ${annotation.kind} · [${escapeMarkdown(annotation.title)}](${markdownDestination(annotation.evidence_url)})${note}`;
         })),
     '',
     '## Releases in this window',
@@ -218,7 +222,7 @@ function renderBriefing(
           .map((release) => {
             const tag = payloadString(release.payload, 'tag') ?? release.external_id;
             const downloads = payloadNumber(release.payload, 'totalAssetDownloads');
-            return `- [${escapeMarkdown(tag)}](${release.evidence_url}) — ${formatNumber(downloads)} cumulative asset downloads at collection time.`;
+            return `- [${escapeMarkdown(tag)}](${markdownDestination(release.evidence_url)}) — ${formatNumber(downloads)} cumulative asset downloads at collection time.`;
           })),
     '',
     '## Freshness and caveats',
@@ -306,7 +310,7 @@ function metricLine(
   change: number | undefined,
   evidenceUrl: string | undefined,
 ): string {
-  const evidence = evidenceUrl ? `[source](${evidenceUrl})` : 'unavailable';
+  const evidence = evidenceUrl ? `[source](${markdownDestination(evidenceUrl)})` : 'unavailable';
   const changeText =
     change === undefined ? '—' : `${change >= 0 ? '+' : ''}${change.toLocaleString('en-US')}`;
   return `| ${label} | ${formatNumber(value)} | ${changeText} | ${evidence} |`;
@@ -318,6 +322,25 @@ function formatNumber(value: number | undefined): string {
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+export function resolveBriefingOutputPath(
+  outputDirectory: string,
+  scope: string,
+  windowEnd: Date,
+): string {
+  const outputRoot = path.resolve(outputDirectory);
+  const safeScope = scope.replaceAll(/[^A-Za-z0-9._-]/g, '-');
+  const outputPath = path.resolve(outputRoot, `${safeScope}-${formatDate(windowEnd)}.md`);
+  const relative = path.relative(outputRoot, outputPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Briefing output path escapes the configured output directory');
+  }
+  return outputPath;
+}
+
+function markdownDestination(value: string): string {
+  return `<${value.replaceAll('\\', '%5C').replaceAll('<', '%3C').replaceAll('>', '%3E')}>`;
 }
 
 function escapeMarkdown(value: string): string {

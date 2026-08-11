@@ -133,7 +133,7 @@ export class ObservationStore {
     await this.database.query(
       `UPDATE collection_runs
        SET status = $2, finished_at = now(), source_metadata = $3::jsonb, error_summary = $4
-       WHERE id = $1`,
+       WHERE id = $1 AND status = 'running'`,
       [runId, status, JSON.stringify(sourceMetadata), errorSummary ?? null],
     );
   }

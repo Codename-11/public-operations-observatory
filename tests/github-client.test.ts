@@ -68,4 +68,27 @@ describe('GitHubClient', () => {
     expect(sleep).toHaveBeenCalledWith(250);
     expect(client.sourceMetadata.remaining).toBe(100);
   });
+
+  it('retries GitHub 403 rate-limit responses', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response('rate limited', {
+          status: 403,
+          headers: { 'retry-after': '0', 'x-ratelimit-remaining': '0' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    const sleep = vi.fn<(milliseconds: number) => Promise<void>>().mockResolvedValue();
+    const client = new GitHubClient(undefined, fetchMock, sleep);
+
+    await expect(client.getJson('/rate-limited')).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(0);
+  });
 });
