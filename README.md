@@ -22,6 +22,8 @@ corepack pnpm install --frozen-lockfile
 docker compose up -d --wait
 corepack pnpm db:migrate
 corepack pnpm collect:github
+# Re-run the idempotent normalizer independently when replaying source observations.
+corepack pnpm normalize:github
 corepack pnpm exec tsx src/cli.ts annotate add \
   --kind release \
   --at 2026-08-11T12:00:00Z \
@@ -48,7 +50,7 @@ docker compose config --quiet
 
 Run `collect:github` at least daily, `briefing:weekly` once per week after collection, and `maintenance:retention` daily. Durable systemd service/timer templates for all three jobs live under `ops/systemd/`; copy them to `~/.config/systemd/user/`, adjust the working directory if needed, then enable the timers with `systemctl --user enable --now public-operations-observatory-{collect,briefing,retention}.timer`. `Persistent=true` catches up missed runs after downtime.
 
-The retention command redacts diagnostic details after 30 days and records each policy execution in `retention_runs`; aggregate observations remain durable. Add release, documentation, and major public-communication annotations before generating the briefing; annotations record chronology, never causation.
+The collector writes immutable source observations, then an independently runnable normalizer persists durable normalized records. Metric evaluation reads those records through versioned definitions rather than collector payload paths. The retention command removes raw GitHub source observations after 90 days, redacts diagnostic details after 30 days, and records both counts and cutoffs in `retention_runs`; normalized records remain durable indefinitely. Raw observations are deleted only after a normalized record exists. Add release, documentation, and major public-communication annotations before generating the briefing; annotations record chronology, never causation.
 
 Deployment-specific backup transport, secret, and network configuration stays outside this public repository. To exercise a backup restore against a disposable database, set `DATABASE_URL`, `OBSERVATORY_RESTORE_DATABASE_URL`, and `OBSERVATORY_BACKUP_TEST_DIR`, then run `corepack pnpm maintenance:verify-restore`. The command creates a custom-format dump, restores it, compares migration and observation counts, and removes the disposable database.
 

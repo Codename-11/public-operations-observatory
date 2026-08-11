@@ -36,7 +36,11 @@ source_migrations=$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM schema_migra
 restored_migrations=$(psql "$OBSERVATORY_RESTORE_DATABASE_URL" -Atc 'SELECT count(*) FROM schema_migrations')
 source_observations=$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM observations')
 restored_observations=$(psql "$OBSERVATORY_RESTORE_DATABASE_URL" -Atc 'SELECT count(*) FROM observations')
+source_normalized=$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM normalized_records')
+restored_normalized=$(psql "$OBSERVATORY_RESTORE_DATABASE_URL" -Atc 'SELECT count(*) FROM normalized_records')
 
 [[ "$source_migrations" == "$restored_migrations" ]]
 [[ "$source_observations" == "$restored_observations" ]]
-printf 'Restore verified: migrations=%s observations=%s\n' "$restored_migrations" "$restored_observations"
+[[ "$source_normalized" == "$restored_normalized" ]]
+printf 'Restore verified: migrations=%s observations=%s normalized_records=%s\n' \
+  "$restored_migrations" "$restored_observations" "$restored_normalized"

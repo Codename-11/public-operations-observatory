@@ -78,11 +78,11 @@ export async function generateWeeklyBriefing(
       ),
       database.query<ObservationRow>(
         `SELECT DISTINCT ON (external_id)
-         record_kind, external_id, observed_bucket, payload, evidence_url
-       FROM observations
+         record_kind, external_id, effective_at AS observed_bucket, payload, evidence_url
+       FROM normalized_records
        WHERE source = 'github' AND scope = $1 AND record_kind = 'release.summary'
-         AND observed_bucket < $2 AND created_at <= $2
-       ORDER BY external_id, observed_bucket DESC, created_at DESC`,
+         AND effective_at < $2 AND source_created_at <= $2 AND normalized_at <= $2
+       ORDER BY external_id, effective_at DESC, normalized_at DESC`,
         [options.scope, options.windowEnd],
       ),
       database.query<RunRow>(
@@ -102,10 +102,14 @@ export async function generateWeeklyBriefing(
         [options.scope, options.windowStart, options.windowEnd],
       ),
       database.query<CheckpointRow>(
-        `SELECT cursor_at FROM source_checkpoint_history
-       WHERE source = 'github' AND scope = $1 AND checkpoint_key = 'daily-collection'
-         AND cursor_at <= $2
-       ORDER BY cursor_at DESC LIMIT 1`,
+        `SELECT history.cursor_at
+       FROM source_checkpoint_history history
+       JOIN collection_runs run ON run.id = history.collection_run_id
+       WHERE history.source = 'github' AND history.scope = $1
+         AND history.checkpoint_key = 'daily-collection'
+         AND history.cursor_at <= $2 AND history.recorded_at <= $2
+         AND run.status = 'succeeded' AND run.finished_at <= $2
+       ORDER BY history.cursor_at DESC LIMIT 1`,
         [options.scope, options.windowEnd],
       ),
     ]);
@@ -231,13 +235,7 @@ function buildWarnings(
     }
     if (latestRun.error_summary)
       warnings.push(`Partial collection: ${escapeMarkdown(latestRun.error_summary)}.`);
-    const rateRemaining = jsonNumber(latestRun.source_metadata, 'remaining');
-    const rateReset = jsonString(latestRun.source_metadata, 'resetAt');
-    if (rateRemaining !== undefined) {
-      warnings.push(
-        `GitHub API rate limit: ${rateRemaining.toLocaleString('en-US')} requests remaining${rateReset ? `; resets at ${rateReset}` : ''}.`,
-      );
-    }
+    warnings.push(...rateLimitWarnings(latestRun.source_metadata));
   }
   if (checkpoint) {
     warnings.push(`Last successful checkpoint: ${checkpoint.cursor_at.toISOString()}.`);
@@ -279,6 +277,22 @@ function jsonNumber(value: JsonValue, key: string): number | undefined {
 function jsonString(value: JsonValue, key: string): string | undefined {
   if (!value || Array.isArray(value) || typeof value !== 'object') return undefined;
   return typeof value[key] === 'string' ? value[key] : undefined;
+}
+
+function rateLimitWarnings(metadata: JsonValue): string[] {
+  if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') return [];
+  const resources = metadata.resources;
+  if (!resources || Array.isArray(resources) || typeof resources !== 'object') return [];
+  return Object.entries(resources)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([resource, quota]) => {
+      const remaining = jsonNumber(quota, 'remaining');
+      if (remaining === undefined) return [];
+      const resetAt = jsonString(quota, 'resetAt');
+      return [
+        `GitHub API ${escapeMarkdown(resource)} rate limit: ${remaining.toLocaleString('en-US')} requests remaining${resetAt ? `; resets at ${resetAt}` : ''}.`,
+      ];
+    });
 }
 
 function formatNumber(value: number | undefined): string {

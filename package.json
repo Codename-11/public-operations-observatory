@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "collect:github": "tsx src/cli.ts collect github",
+    "normalize:github": "tsx src/cli.ts normalize github",
     "briefing:weekly": "tsx src/cli.ts briefing weekly",
     "db:migrate": "tsx src/cli.ts db migrate",
     "maintenance:retention": "tsx src/cli.ts maintenance retention",

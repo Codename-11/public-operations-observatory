@@ -27,7 +27,7 @@ export async function evaluateMetrics(
        metric_key, aggregation, external_id, effective_at, value_numeric, evidence_url
      FROM normalized_metric_observations
      WHERE scope = $1 AND metric_version = $2
-       AND effective_at < $3 AND created_at <= $3
+       AND effective_at < $3 AND created_at <= $3 AND normalized_at <= $3
      ORDER BY metric_key, external_id, effective_at, created_at DESC`,
     [scope, version, windowEnd],
   );
@@ -97,7 +97,7 @@ export async function evaluateLatestPerEntityMetric(
        metric_key, aggregation, external_id, effective_at, value_numeric, evidence_url
      FROM normalized_metric_observations
      WHERE scope = $1 AND metric_version = $2 AND metric_key = $3
-       AND effective_at < $4 AND created_at <= $4
+       AND effective_at < $4 AND created_at <= $4 AND normalized_at <= $4
      ORDER BY external_id, effective_at DESC, created_at DESC`,
     [scope, version, metricKey, windowEnd],
   );

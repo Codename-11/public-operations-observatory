@@ -76,6 +76,9 @@ export class ObservationStore {
         throw new Error('Observation source and scope must match its collection run');
       }
     }
+    if (checkpoint && completion.status !== 'succeeded') {
+      throw new Error('Only a succeeded collection run may advance a checkpoint');
+    }
     const client = await this.database.connect();
     try {
       await client.query('BEGIN');
@@ -83,6 +86,18 @@ export class ObservationStore {
       for (const observation of observations) {
         inserted += await this.insertObservation(client, run.id, observation);
       }
+      const completed = await client.query(
+        `UPDATE collection_runs
+         SET status = $2, finished_at = now(), source_metadata = $3::jsonb, error_summary = $4
+         WHERE id = $1 AND status = 'running'`,
+        [
+          run.id,
+          completion.status,
+          JSON.stringify(completion.sourceMetadata ?? {}),
+          completion.errorSummary ?? null,
+        ],
+      );
+      if (completed.rowCount !== 1) throw new Error('Collection run was not in running state');
       if (checkpoint) {
         await client.query(
           `INSERT INTO source_checkpoints
@@ -118,18 +133,6 @@ export class ObservationStore {
           ],
         );
       }
-      const completed = await client.query(
-        `UPDATE collection_runs
-         SET status = $2, finished_at = now(), source_metadata = $3::jsonb, error_summary = $4
-         WHERE id = $1 AND status = 'running'`,
-        [
-          run.id,
-          completion.status,
-          JSON.stringify(completion.sourceMetadata ?? {}),
-          completion.errorSummary ?? null,
-        ],
-      );
-      if (completed.rowCount !== 1) throw new Error('Collection run was not in running state');
       await client.query('COMMIT');
       return inserted;
     } catch (error) {

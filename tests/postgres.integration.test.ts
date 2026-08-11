@@ -10,6 +10,7 @@ import { migrate } from '../src/db/migrate.js';
 import { ObservationStore } from '../src/db/observation-store.js';
 import { applyRetention } from '../src/db/retention.js';
 import { dayBucket } from '../src/domain/observation.js';
+import { normalizeGitHubObservations } from '../src/normalization/github.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
 const scope = 'test/example';
@@ -84,7 +85,11 @@ integration('PostgreSQL operating loop', () => {
         },
         {
           status: 'succeeded',
-          sourceMetadata: { remaining: 4_321, resetAt: '2026-08-10T15:00:00.000Z' },
+          sourceMetadata: {
+            resources: {
+              core: { remaining: 4_321, resetAt: '2026-08-10T15:00:00.000Z' },
+            },
+          },
         },
       ),
     ).toBe(1);
@@ -122,6 +127,7 @@ integration('PostgreSQL operating loop', () => {
          '{"stars":9999}'::jsonb, 'not-a-real-digest', 'https://example.com', $3)`,
       [scope, new Date('2026-08-10T00:00:00Z'), changedRun.id],
     );
+    await expect(normalizeGitHubObservations(database, scope)).resolves.toBe(2);
 
     const briefingOptions = {
       scope,
@@ -133,7 +139,7 @@ integration('PostgreSQL operating loop', () => {
     const result = await generateWeeklyBriefing(database, briefingOptions);
     expect(result.markdown).toContain('| GitHub stars | 13 |');
     expect(result.markdown).toContain('Last successful checkpoint: 2026-08-10T14:00:00.000Z.');
-    expect(result.markdown).toContain('GitHub API rate limit: 4,321 requests remaining');
+    expect(result.markdown).toContain('GitHub API core rate limit: 4,321 requests remaining');
     expect(result.markdown).toContain('[source](<https://github.com/test/example>)');
     expect(result.markdown).toContain(
       '[Example release](<https://github.com/test/example/releases/tag/v1.0.0>)',
@@ -151,18 +157,23 @@ integration('PostgreSQL operating loop', () => {
     );
     expect(normalized.rows[0]).toEqual({ metric_key: 'github.stars', value_numeric: '13' });
 
-    const futureRun = await database.query<{ id: string }>(
+    const lateCheckpointRun = await database.query<{ id: string }>(
       `INSERT INTO collection_runs
          (source, scope, status, started_at, finished_at, error_summary)
-       VALUES ('github', $1, 'succeeded', $2, $2, 'future diagnostic')
+       VALUES ('github', $1, 'succeeded', $2, $2, NULL)
        RETURNING id`,
-      [scope, new Date('2026-08-13T00:00:00Z')],
+      [scope, new Date('2026-08-10T13:30:00Z')],
     );
     await database.query(
       `INSERT INTO source_checkpoint_history
-         (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id)
-       VALUES ('github', $1, 'daily-collection', '{}'::jsonb, $2, $3)`,
-      [scope, new Date('2026-08-13T00:00:00Z'), futureRun.rows[0]?.id],
+         (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id, recorded_at)
+       VALUES ('github', $1, 'daily-collection', '{}'::jsonb, $2, $3, $4)`,
+      [
+        scope,
+        new Date('2026-08-11T00:00:00Z'),
+        lateCheckpointRun.rows[0]?.id,
+        new Date('2026-08-13T00:00:00Z'),
+      ],
     );
     await database.query(
       `INSERT INTO observations
@@ -178,6 +189,7 @@ integration('PostgreSQL operating loop', () => {
         new Date('2026-08-13T00:00:00Z'),
       ],
     );
+    await expect(normalizeGitHubObservations(database, scope)).resolves.toBe(1);
     const regenerated = await generateWeeklyBriefing(database, briefingOptions);
     expect(regenerated.digest).toBe(result.digest);
     await expect(
@@ -252,17 +264,51 @@ integration('PostgreSQL operating loop', () => {
       ),
     ).rejects.toThrow('Observation source and scope must match its collection run');
     await store.finishRun(mismatchRun.id, 'failed');
+
+    const partialRun = await store.beginRun('github', scope);
+    await expect(
+      store.persistBatch(
+        partialRun,
+        [],
+        {
+          key: 'daily',
+          observedAt: new Date('2026-08-11T00:00:00Z'),
+          cursor: { observedAt: '2026-08-11T00:00:00Z' },
+        },
+        { status: 'partial' },
+      ),
+    ).rejects.toThrow('Only a succeeded collection run may advance a checkpoint');
+    await store.finishRun(partialRun.id, 'partial');
+    await expect(
+      database.query(
+        `INSERT INTO source_checkpoint_history
+           (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id)
+         VALUES ('github', $1, 'invalid', '{}'::jsonb, $2, $3)`,
+        [scope, new Date('2026-08-11T00:00:00Z'), partialRun.id],
+      ),
+    ).rejects.toThrow('checkpoint collection run must be succeeded');
   });
 
-  it('redacts expired diagnostics and records an auditable retention run', async () => {
-    await database.query(
+  it('enforces raw and diagnostic retention with an audit record', async () => {
+    const oldRun = await database.query<{ id: string }>(
       `INSERT INTO collection_runs
          (source, scope, status, started_at, finished_at, error_summary, source_metadata)
-       VALUES ('github', $1, 'failed', $2, $2, 'old error', '{"remaining":1}'::jsonb)`,
+       VALUES ('github', $1, 'failed', $2, $2, 'old error', '{"remaining":1}'::jsonb)
+       RETURNING id`,
       [scope, new Date('2026-06-01T00:00:00Z')],
     );
+    await database.query(
+      `INSERT INTO observations
+         (source, scope, record_kind, external_id, observed_bucket, schema_version,
+          payload, payload_digest, evidence_url, collection_run_id, created_at)
+       VALUES ('github', $1, 'repository.summary', 'repository', $2, 1,
+         '{"stars":1}'::jsonb, 'expired-raw', 'https://github.com/test/example', $3, $2)`,
+      [scope, new Date('2026-05-01T00:00:00Z'), oldRun.rows[0]?.id],
+    );
+    await expect(normalizeGitHubObservations(database, scope)).resolves.toBe(1);
     const result = await applyRetention(database, new Date('2026-08-11T00:00:00Z'));
     expect(result.diagnosticsRedacted).toBeGreaterThan(0);
+    expect(result.rawObservationsDeleted).toBe(1);
     const retained = await database.query<{
       error_summary: string | null;
       source_metadata: object;
@@ -272,6 +318,12 @@ integration('PostgreSQL operating loop', () => {
       [scope, new Date('2026-06-01T00:00:00Z')],
     );
     expect(retained.rows[0]).toEqual({ error_summary: null, source_metadata: {} });
+    const durable = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM normalized_records
+       WHERE scope = $1 AND source_created_at = $2`,
+      [scope, new Date('2026-05-01T00:00:00Z')],
+    );
+    expect(durable.rows[0]?.count).toBe('1');
   });
 
   it('serializes concurrent migration attempts', async () => {
@@ -295,6 +347,7 @@ async function cleanup(database: Database): Promise<void> {
   await database.query('DELETE FROM annotations WHERE scope = $1', [scope]);
   await database.query('DELETE FROM source_checkpoint_history WHERE scope = $1', [scope]);
   await database.query('DELETE FROM source_checkpoints WHERE scope = $1', [scope]);
+  await database.query('DELETE FROM normalized_records WHERE scope = $1', [scope]);
   await database.query('DELETE FROM observations WHERE scope = $1', [scope]);
   await database.query('DELETE FROM collection_runs WHERE scope = $1', [scope]);
 }

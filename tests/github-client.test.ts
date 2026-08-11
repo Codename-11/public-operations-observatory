@@ -12,6 +12,7 @@ describe('GitHubClient', () => {
           'x-ratelimit-limit': '5000',
           'x-ratelimit-remaining': '4999',
           'x-ratelimit-reset': '1786500000',
+          'x-ratelimit-resource': 'core',
         },
       }),
     );
@@ -27,7 +28,9 @@ describe('GitHubClient', () => {
       'X-GitHub-Api-Version': '2022-11-28',
     });
     expect(request?.[1]?.signal).toBeInstanceOf(AbortSignal);
-    expect(client.sourceMetadata).toMatchObject({ limit: 5000, remaining: 4999 });
+    expect(client.sourceMetadata).toMatchObject({
+      resources: { core: { limit: 5000, remaining: 4999 } },
+    });
   });
 
   it('returns a bounded error without leaking authorization', async () => {
@@ -66,7 +69,7 @@ describe('GitHubClient', () => {
     await expect(client.getJson('/transient')).resolves.toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledWith(250);
-    expect(client.sourceMetadata.remaining).toBe(100);
+    expect(client.sourceMetadata.resources.unknown?.remaining).toBe(100);
   });
 
   it('retries GitHub 403 rate-limit responses', async () => {
@@ -90,5 +93,40 @@ describe('GitHubClient', () => {
     await expect(client.getJson('/rate-limited')).resolves.toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledWith(0);
+  });
+
+  it('keeps deterministic quota snapshots per GitHub resource', async () => {
+    const response = (resource: string, remaining: number, reset: number) =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'x-ratelimit-resource': resource,
+          'x-ratelimit-limit': resource === 'search' ? '30' : '5000',
+          'x-ratelimit-remaining': String(remaining),
+          'x-ratelimit-reset': String(reset),
+        },
+      });
+    const first = new GitHubClient(
+      undefined,
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(response('core', 100, 1_786_500_000))
+        .mockResolvedValueOnce(response('search', 20, 1_786_500_100))
+        .mockResolvedValueOnce(response('core', 100, 1_786_500_200)),
+    );
+    const second = new GitHubClient(
+      undefined,
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(response('core', 100, 1_786_500_200))
+        .mockResolvedValueOnce(response('search', 20, 1_786_500_100))
+        .mockResolvedValueOnce(response('core', 100, 1_786_500_000)),
+    );
+    for (const client of [first, second]) {
+      await Promise.all([client.getJson('/one'), client.getJson('/two'), client.getJson('/three')]);
+    }
+    expect(first.sourceMetadata).toEqual(second.sourceMetadata);
+    expect(Object.keys(first.sourceMetadata.resources)).toEqual(['core', 'search']);
   });
 });

@@ -5,7 +5,7 @@ import type { CheckpointInput, CollectionRun, RunCompletion } from '../src/db/ob
 import { collectGitHub } from '../src/github/collector.js';
 
 class FakeGitHubReader {
-  public readonly sourceMetadata = { remaining: 4990 };
+  public readonly sourceMetadata = { resources: { core: { remaining: 4990 } } };
   public readonly requestedPaths: string[] = [];
 
   public constructor(
