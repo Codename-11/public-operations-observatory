@@ -104,6 +104,15 @@ integration('PostgreSQL operating loop', () => {
     };
     const annotationId = await addAnnotation(database, annotation);
     await expect(addAnnotation(database, annotation)).resolves.toBe(annotationId);
+    await expect(
+      addAnnotation(database, { ...annotation, note: 'Changed later.' }),
+    ).rejects.toThrow('Annotation already exists with a different note');
+    await expect(
+      database.query("UPDATE annotations SET note = 'mutated' WHERE id = $1", [annotationId]),
+    ).rejects.toThrow('annotations are append-only');
+    await expect(
+      database.query('DELETE FROM annotations WHERE id = $1', [annotationId]),
+    ).rejects.toThrow('annotations are append-only');
     await addAnnotation(database, {
       scope,
       occurredAt: new Date('2026-08-09T11:00:00Z'),
@@ -346,6 +355,47 @@ integration('PostgreSQL operating loop', () => {
     expect(durable.rows[0]?.count).toBe('1');
   });
 
+  it('serializes checkpoint insertion against concurrent run demotion', async () => {
+    const store = new ObservationStore(database);
+    const run = await store.beginRun('github', scope);
+    await store.persistBatch(run, [], undefined, { status: 'succeeded' });
+    const checkpointer = await database.connect();
+    const demoter = await database.connect();
+    try {
+      await checkpointer.query('BEGIN');
+      await demoter.query('BEGIN');
+      await checkpointer.query(
+        `INSERT INTO source_checkpoint_history
+           (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id)
+         VALUES ('github', $1, 'race', '{}'::jsonb, $2, $3)`,
+        [scope, new Date('2026-08-11T00:00:00Z'), run.id],
+      );
+      const demotion = demoter.query("UPDATE collection_runs SET status = 'failed' WHERE id = $1", [
+        run.id,
+      ]);
+      await checkpointer.query('COMMIT');
+      await expect(demotion).rejects.toThrow(
+        'a collection run referenced by a checkpoint must remain succeeded',
+      );
+      await demoter.query('ROLLBACK');
+      const invariant = await database.query<{ refs: string; status: string }>(
+        `SELECT run.status,
+           count(history.collection_run_id)::text AS refs
+         FROM collection_runs run
+         LEFT JOIN source_checkpoint_history history ON history.collection_run_id = run.id
+         WHERE run.id = $1
+         GROUP BY run.status`,
+        [run.id],
+      );
+      expect(invariant.rows[0]).toEqual({ refs: '1', status: 'succeeded' });
+    } finally {
+      await checkpointer.query('ROLLBACK').catch(() => undefined);
+      await demoter.query('ROLLBACK').catch(() => undefined);
+      checkpointer.release();
+      demoter.release();
+    }
+  });
+
   it('serializes concurrent migration attempts', async () => {
     const [left, right] = await Promise.all([migrate(database), migrate(database)]);
     expect(left).toEqual([]);
@@ -364,7 +414,7 @@ integration('PostgreSQL operating loop', () => {
 
 async function cleanup(database: Database): Promise<void> {
   await database.query('DELETE FROM briefing_revisions WHERE scope = $1', [scope]);
-  await database.query('DELETE FROM annotations WHERE scope = $1', [scope]);
+  await database.query('TRUNCATE annotations');
   await database.query('DELETE FROM source_checkpoint_history WHERE scope = $1', [scope]);
   await database.query('DELETE FROM source_checkpoints WHERE scope = $1', [scope]);
   await database.query('DELETE FROM normalized_records WHERE scope = $1', [scope]);
