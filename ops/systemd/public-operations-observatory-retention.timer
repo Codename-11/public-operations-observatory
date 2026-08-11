@@ -1,0 +1,10 @@
+[Unit]
+Description=Apply Public Operations Observatory retention policy daily
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

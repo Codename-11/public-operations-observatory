@@ -4,6 +4,11 @@ import path from 'node:path';
 
 import type { Database } from '../db/client.js';
 import type { JsonValue } from '../domain/observation.js';
+import {
+  evaluateLatestPerEntityMetric,
+  evaluateMetrics,
+  type EvaluatedMetric,
+} from '../metrics/evaluate.js';
 
 interface ObservationRow {
   record_kind: string;
@@ -17,6 +22,11 @@ interface RunRow {
   finished_at: Date;
   status: string;
   error_summary: string | null;
+  source_metadata: JsonValue;
+}
+
+interface CheckpointRow {
+  cursor_at: Date;
 }
 
 interface AnnotationRow {
@@ -50,60 +60,69 @@ export async function generateWeeklyBriefing(
   if (metricVersion !== 1) {
     throw new Error(`Unsupported metric definition version: ${metricVersion}`);
   }
-  const [windowRows, latestRows, priorRows, runRows, annotationRows] = await Promise.all([
-    database.query<ObservationRow>(
-      `SELECT DISTINCT ON (record_kind, external_id, observed_bucket)
-         record_kind, external_id, observed_bucket, payload, evidence_url
-       FROM observations
-       WHERE source = 'github' AND scope = $1
-         AND observed_bucket >= $2 AND observed_bucket < $3
-         AND created_at <= $3
-       ORDER BY record_kind, external_id, observed_bucket, created_at DESC`,
-      [options.scope, options.windowStart, options.windowEnd],
-    ),
-    database.query<ObservationRow>(
-      `SELECT DISTINCT ON (record_kind, external_id)
-         record_kind, external_id, observed_bucket, payload, evidence_url
-       FROM observations
-       WHERE source = 'github' AND scope = $1
-         AND observed_bucket < $2 AND created_at <= $2
-       ORDER BY record_kind, external_id, observed_bucket DESC, created_at DESC`,
-      [options.scope, options.windowEnd],
-    ),
-    database.query<ObservationRow>(
-      `SELECT DISTINCT ON (record_kind, external_id)
-         record_kind, external_id, observed_bucket, payload, evidence_url
-       FROM observations
-       WHERE source = 'github' AND scope = $1
-         AND observed_bucket < $2 AND created_at <= $3
-       ORDER BY record_kind, external_id, observed_bucket DESC, created_at DESC`,
-      [options.scope, options.windowStart, options.windowEnd],
-    ),
-    database.query<RunRow>(
-      `SELECT finished_at, status, error_summary
+  const [metrics, releaseDownloads, releaseRows, runRows, annotationRows, checkpointRows] =
+    await Promise.all([
+      evaluateMetrics(
+        database,
+        options.scope,
+        metricVersion,
+        options.windowStart,
+        options.windowEnd,
+      ),
+      evaluateLatestPerEntityMetric(
+        database,
+        options.scope,
+        metricVersion,
+        'github.release_asset_downloads',
+        options.windowEnd,
+      ),
+      database.query<ObservationRow>(
+        `SELECT DISTINCT ON (external_id)
+         record_kind, external_id, effective_at AS observed_bucket, payload, evidence_url
+       FROM normalized_records
+       WHERE source = 'github' AND scope = $1 AND record_kind = 'release.summary'
+         AND effective_at < $2 AND source_created_at <= $2 AND normalized_at <= $2
+       ORDER BY external_id, effective_at DESC, normalized_at DESC`,
+        [options.scope, options.windowEnd],
+      ),
+      database.query<RunRow>(
+        `SELECT finished_at, status, error_summary, source_metadata
       FROM collection_runs
       WHERE source = 'github' AND scope = $1
         AND finished_at IS NOT NULL AND finished_at <= $2
       ORDER BY finished_at DESC
       LIMIT 1`,
-      [options.scope, options.windowEnd],
-    ),
-    database.query<AnnotationRow>(
-      `SELECT occurred_at, kind, title, evidence_url, note
+        [options.scope, options.windowEnd],
+      ),
+      database.query<AnnotationRow>(
+        `SELECT occurred_at, kind, title, evidence_url, note
        FROM annotations
        WHERE scope = $1 AND occurred_at >= $2 AND occurred_at < $3
+         AND created_at <= $3
        ORDER BY occurred_at, kind, title`,
-      [options.scope, options.windowStart, options.windowEnd],
-    ),
-  ]);
+        [options.scope, options.windowStart, options.windowEnd],
+      ),
+      database.query<CheckpointRow>(
+        `SELECT history.cursor_at
+       FROM source_checkpoint_history history
+       JOIN collection_runs run ON run.id = history.collection_run_id
+       WHERE history.source = 'github' AND history.scope = $1
+         AND history.checkpoint_key = 'daily-collection'
+         AND history.cursor_at <= $2 AND history.recorded_at <= $2
+         AND run.status = 'succeeded' AND run.finished_at <= $2
+       ORDER BY history.cursor_at DESC LIMIT 1`,
+        [options.scope, options.windowEnd],
+      ),
+    ]);
 
   const markdown = renderBriefing(
     options,
-    windowRows.rows,
-    latestRows.rows,
-    priorRows.rows,
+    metrics,
+    releaseDownloads,
+    releaseRows.rows,
     runRows.rows[0],
     annotationRows.rows,
+    checkpointRows.rows[0],
   );
   const digest = createHash('sha256').update(markdown).digest('hex');
   await database.query(
@@ -126,31 +145,20 @@ export async function generateWeeklyBriefing(
 
 function renderBriefing(
   options: BriefingOptions,
-  windowRows: ObservationRow[],
-  latestRows: ObservationRow[],
-  priorRows: ObservationRow[],
+  metrics: Map<string, EvaluatedMetric>,
+  releaseDownloads: Map<string, EvaluatedMetric>,
+  releaseRows: ObservationRow[],
   latestRun: RunRow | undefined,
   annotations: AnnotationRow[],
+  checkpoint: CheckpointRow | undefined,
 ): string {
-  const latest = indexRows(latestRows);
-  const prior = indexRows(priorRows);
-  const repository = latest.get('repository.summary:repository');
-  const priorRepository = prior.get('repository.summary:repository');
-  const issues = latest.get('issues.summary:issues');
-  const priorIssues = prior.get('issues.summary:issues');
-  const pulls = latest.get('pulls.summary:pulls');
-  const workflows = latest.get('workflows.summary:workflow-runs');
-  const views = sumPayloadNumber(windowRows, 'traffic.views', 'count');
-  const uniqueViews = sumPayloadNumber(windowRows, 'traffic.views', 'uniques');
-  const clones = sumPayloadNumber(windowRows, 'traffic.clones', 'count');
-  const releaseRows = latestRows.filter((row) => row.record_kind === 'release.summary');
   const releases = releaseRows.filter((row) => {
     const publishedAt = payloadString(row.payload, 'publishedAt');
     if (!publishedAt) return false;
     const date = new Date(publishedAt);
     return date >= options.windowStart && date < options.windowEnd;
   });
-  const warnings = buildWarnings(options, latestRun, windowRows);
+  const warnings = buildWarnings(options, latestRun, metrics, checkpoint);
 
   const lines = [
     `# ${options.scope} public-operations briefing`,
@@ -163,44 +171,14 @@ function renderBriefing(
     '',
     '| Signal | Current/window value | Change | Evidence |',
     '| --- | ---: | ---: | --- |',
-    metricLine(
-      'GitHub stars',
-      payloadNumber(repository?.payload, 'stars'),
-      delta(repository, priorRepository, 'stars'),
-      repository?.evidence_url,
-    ),
-    metricLine(
-      'GitHub forks',
-      payloadNumber(repository?.payload, 'forks'),
-      delta(repository, priorRepository, 'forks'),
-      repository?.evidence_url,
-    ),
-    metricLine('Page views', views, undefined, firstEvidence(windowRows, 'traffic.views')),
-    metricLine(
-      'Unique page views',
-      uniqueViews,
-      undefined,
-      firstEvidence(windowRows, 'traffic.views'),
-    ),
-    metricLine('Repository clones', clones, undefined, firstEvidence(windowRows, 'traffic.clones')),
-    metricLine(
-      'Open issues',
-      payloadNumber(issues?.payload, 'open'),
-      delta(issues, priorIssues, 'open'),
-      issues?.evidence_url,
-    ),
-    metricLine(
-      'Open pull requests',
-      payloadNumber(pulls?.payload, 'open'),
-      undefined,
-      pulls?.evidence_url,
-    ),
-    metricLine(
-      'Workflow runs (all time)',
-      payloadNumber(workflows?.payload, 'totalRuns'),
-      undefined,
-      workflows?.evidence_url,
-    ),
+    metricLine('GitHub stars', metrics.get('github.stars')),
+    metricLine('GitHub forks', metrics.get('github.forks')),
+    metricLine('Page views', metrics.get('github.views')),
+    metricLine('Unique page views', metrics.get('github.unique_views')),
+    metricLine('Repository clones', metrics.get('github.clones')),
+    metricLine('Open issues', metrics.get('github.open_issues')),
+    metricLine('Open pull requests', metrics.get('github.open_pulls')),
+    metricLine('Workflow runs (all time)', metrics.get('github.workflow_runs')),
     '',
     '## Operational timeline',
     '',
@@ -221,7 +199,7 @@ function renderBriefing(
           .sort((left, right) => left.external_id.localeCompare(right.external_id))
           .map((release) => {
             const tag = payloadString(release.payload, 'tag') ?? release.external_id;
-            const downloads = payloadNumber(release.payload, 'totalAssetDownloads');
+            const downloads = releaseDownloads.get(release.external_id)?.value;
             return `- [${escapeMarkdown(tag)}](${markdownDestination(release.evidence_url)}) — ${formatNumber(downloads)} cumulative asset downloads at collection time.`;
           })),
     '',
@@ -238,7 +216,8 @@ function renderBriefing(
 function buildWarnings(
   options: BriefingOptions,
   latestRun: RunRow | undefined,
-  windowRows: ObservationRow[],
+  metrics: Map<string, EvaluatedMetric>,
+  checkpoint: CheckpointRow | undefined,
 ): string[] {
   const warnings: string[] = [];
   if (!latestRun) {
@@ -257,35 +236,19 @@ function buildWarnings(
     }
     if (latestRun.error_summary)
       warnings.push(`Partial collection: ${escapeMarkdown(latestRun.error_summary)}.`);
+    warnings.push(...rateLimitWarnings(latestRun.source_metadata));
   }
-  for (const kind of ['traffic.views', 'traffic.clones']) {
-    if (!windowRows.some((row) => row.record_kind === kind)) {
-      warnings.push(`${kind} is unavailable for this window.`);
+  if (checkpoint) {
+    warnings.push(`Last successful checkpoint: ${checkpoint.cursor_at.toISOString()}.`);
+  } else {
+    warnings.push('No successful collection checkpoint is available for this window.');
+  }
+  for (const metricKey of ['github.views', 'github.clones']) {
+    if (metrics.get(metricKey)?.value === undefined) {
+      warnings.push(`${metricKey} is unavailable for this window.`);
     }
   }
   return warnings;
-}
-
-function indexRows(rows: ObservationRow[]): Map<string, ObservationRow> {
-  return new Map(rows.map((row) => [`${row.record_kind}:${row.external_id}`, row]));
-}
-
-function delta(
-  current: ObservationRow | undefined,
-  previous: ObservationRow | undefined,
-  key: string,
-): number | undefined {
-  const currentValue = payloadNumber(current?.payload, key);
-  const previousValue = payloadNumber(previous?.payload, key);
-  return currentValue === undefined || previousValue === undefined
-    ? undefined
-    : currentValue - previousValue;
-}
-
-function payloadNumber(payload: JsonValue | undefined, key: string): number | undefined {
-  if (!payload || Array.isArray(payload) || typeof payload !== 'object') return undefined;
-  const value = payload[key];
-  return typeof value === 'number' ? value : undefined;
 }
 
 function payloadString(payload: JsonValue, key: string): string | undefined {
@@ -294,26 +257,43 @@ function payloadString(payload: JsonValue, key: string): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function sumPayloadNumber(rows: ObservationRow[], kind: string, key: string): number | undefined {
-  const matching = rows.filter((row) => row.record_kind === kind);
-  if (matching.length === 0) return undefined;
-  return matching.reduce((total, row) => total + (payloadNumber(row.payload, key) ?? 0), 0);
-}
-
-function firstEvidence(rows: ObservationRow[], kind: string): string | undefined {
-  return rows.find((row) => row.record_kind === kind)?.evidence_url;
-}
-
-function metricLine(
-  label: string,
-  value: number | undefined,
-  change: number | undefined,
-  evidenceUrl: string | undefined,
-): string {
-  const evidence = evidenceUrl ? `[source](${markdownDestination(evidenceUrl)})` : 'unavailable';
+function metricLine(label: string, metric: EvaluatedMetric | undefined): string {
+  const evidence = metric?.evidenceUrl
+    ? `[source](${markdownDestination(metric.evidenceUrl)})`
+    : 'unavailable';
+  const change =
+    metric?.value === undefined || metric.previous === undefined
+      ? undefined
+      : metric.value - metric.previous;
   const changeText =
     change === undefined ? '—' : `${change >= 0 ? '+' : ''}${change.toLocaleString('en-US')}`;
-  return `| ${label} | ${formatNumber(value)} | ${changeText} | ${evidence} |`;
+  return `| ${label} | ${formatNumber(metric?.value)} | ${changeText} | ${evidence} |`;
+}
+
+function jsonNumber(value: JsonValue, key: string): number | undefined {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined;
+  return typeof value[key] === 'number' ? value[key] : undefined;
+}
+
+function jsonString(value: JsonValue, key: string): string | undefined {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined;
+  return typeof value[key] === 'string' ? value[key] : undefined;
+}
+
+function rateLimitWarnings(metadata: JsonValue): string[] {
+  if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') return [];
+  const resources = metadata.resources;
+  if (!resources || Array.isArray(resources) || typeof resources !== 'object') return [];
+  return Object.entries(resources)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([resource, quota]) => {
+      const remaining = jsonNumber(quota, 'remaining');
+      if (remaining === undefined) return [];
+      const resetAt = jsonString(quota, 'resetAt');
+      return [
+        `GitHub API ${escapeMarkdown(resource)} rate limit: ${remaining.toLocaleString('en-US')} requests remaining${resetAt ? `; resets at ${resetAt}` : ''}.`,
+      ];
+    });
 }
 
 function formatNumber(value: number | undefined): string {

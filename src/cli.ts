@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { loadEnvFile } from 'node:process';
 
 import { generateWeeklyBriefing } from './briefing/generate.js';
+import { latestCompletedUtcWeekEnd } from './briefing/window.js';
 import { loadConfig } from './config.js';
 import { addAnnotation, type AnnotationKind } from './db/annotations.js';
 import { createDatabase } from './db/client.js';
@@ -11,6 +12,7 @@ import { ObservationStore } from './db/observation-store.js';
 import { applyRetention } from './db/retention.js';
 import { GitHubClient } from './github/client.js';
 import { collectGitHub } from './github/collector.js';
+import { normalizeGitHubObservations } from './normalization/github.js';
 
 if (existsSync('.env')) loadEnvFile('.env');
 
@@ -36,8 +38,22 @@ async function main(): Promise<void> {
         config.GITHUB_OWNER,
         config.GITHUB_REPOSITORY,
       );
-      console.log(JSON.stringify(result));
+      const normalized = await normalizeGitHubObservations(
+        database,
+        `${config.GITHUB_OWNER}/${config.GITHUB_REPOSITORY}`,
+      );
+      console.log(JSON.stringify({ ...result, normalized }));
       if (result.errors.length > 0) process.exitCode = 2;
+      return;
+    }
+
+    if (group === 'normalize' && command === 'github') {
+      await migrate(database);
+      const normalized = await normalizeGitHubObservations(
+        database,
+        `${config.GITHUB_OWNER}/${config.GITHUB_REPOSITORY}`,
+      );
+      console.log(JSON.stringify({ normalized }));
       return;
     }
 
@@ -84,7 +100,7 @@ async function main(): Promise<void> {
     }
 
     throw new Error(
-      'Usage: db migrate | collect github | briefing weekly [--end YYYY-MM-DD] | annotate add --kind KIND --at ISO --title TITLE --url URL [--note NOTE] | maintenance retention',
+      'Usage: db migrate | collect github | normalize github | briefing weekly [--end YYYY-MM-DD] | annotate add --kind KIND --at ISO --title TITLE --url URL [--note NOTE] | maintenance retention',
     );
   } finally {
     await database.end();
@@ -93,7 +109,7 @@ async function main(): Promise<void> {
 
 function parseWindowEnd(arguments_: string[]): Date {
   const index = arguments_.indexOf('--end');
-  if (index === -1) return new Date();
+  if (index === -1) return latestCompletedUtcWeekEnd(new Date());
   const value = arguments_[index + 1];
   if (!value) throw new Error('--end requires an ISO date');
   const parsed = new Date(`${value}T00:00:00.000Z`);

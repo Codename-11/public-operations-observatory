@@ -50,10 +50,6 @@ interface ReleaseResponse {
   assets: Array<{ id: number; download_count: number }>;
 }
 
-interface StargazerResponse {
-  starred_at: string;
-}
-
 export interface GitHubCollectionResult {
   inserted: number;
   observations: number;
@@ -105,7 +101,6 @@ async function collectGitHubWithLock(
       capture('issues', () => collectIssueAndPullCounts(client, owner, repository, now)),
       capture('workflows', () => collectWorkflows(client, owner, repository, now)),
       capture('releases', () => collectReleases(client, owner, repository, now)),
-      capture('stargazers', () => collectStargazers(client, owner, repository)),
     ])),
   ];
 
@@ -113,24 +108,23 @@ async function collectGitHubWithLock(
   const errors = sections.flatMap((section) => (section.error ? [section.error] : []));
 
   try {
-    const inserted = await store.persistBatch(
-      run,
-      observations,
-      {
-        key: 'daily-collection',
-        observedAt: now,
-        cursor: {
-          observedAt: now.toISOString(),
-          successfulSections: sections.length - errors.length,
-          failedSections: errors.length,
-        },
-      },
-      {
-        status: errors.length === 0 ? 'succeeded' : 'partial',
-        sourceMetadata: client.sourceMetadata,
-        ...(errors.length > 0 ? { errorSummary: errors.join('; ').slice(0, 1_000) } : {}),
-      },
-    );
+    const checkpoint =
+      errors.length === 0
+        ? {
+            key: 'daily-collection',
+            observedAt: now,
+            cursor: {
+              observedAt: now.toISOString(),
+              successfulSections: sections.length,
+              failedSections: 0,
+            },
+          }
+        : undefined;
+    const inserted = await store.persistBatch(run, observations, checkpoint, {
+      status: errors.length === 0 ? 'succeeded' : 'partial',
+      sourceMetadata: client.sourceMetadata,
+      ...(errors.length > 0 ? { errorSummary: errors.join('; ').slice(0, 1_000) } : {}),
+    });
     return { inserted, observations: observations.length, errors };
   } catch (error) {
     await finishFailedRun(store, run, client, error);
@@ -342,32 +336,6 @@ async function collectReleases(
         release.html_url,
       ),
     );
-}
-
-async function collectStargazers(
-  client: GitHubReader,
-  owner: string,
-  repository: string,
-): Promise<ObservationInput[]> {
-  const daily = new Map<string, number>();
-  for (let page = 1; page <= 100; page += 1) {
-    const stargazers = await client.getJson<StargazerResponse[]>(
-      `/repos/${owner}/${repository}/stargazers?per_page=100&page=${page}`,
-      'application/vnd.github.star+json',
-    );
-    for (const star of stargazers) {
-      const bucket = dayBucket(new Date(star.starred_at)).toISOString();
-      daily.set(bucket, (daily.get(bucket) ?? 0) + 1);
-    }
-    if (stargazers.length < 100) break;
-    if (page === 100) {
-      throw new Error('Stargazer history exceeds the explicit 10,000-entry collection bound');
-    }
-  }
-  const evidenceUrl = `https://github.com/${owner}/${repository}/stargazers`;
-  return [...daily.entries()].map(([bucket, count]) =>
-    observation(owner, repository, 'stars.daily', bucket, new Date(bucket), { count }, evidenceUrl),
-  );
 }
 
 function observation(

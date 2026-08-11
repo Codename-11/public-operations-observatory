@@ -1,7 +1,11 @@
-export interface GitHubRateLimit extends Record<string, unknown> {
+export interface GitHubRateLimit {
   limit?: number;
   remaining?: number;
   resetAt?: string;
+}
+
+export interface GitHubSourceMetadata extends Record<string, unknown> {
+  resources: Record<string, GitHubRateLimit>;
 }
 
 export class GitHubApiError extends Error {
@@ -16,7 +20,7 @@ export class GitHubApiError extends Error {
 }
 
 export class GitHubClient {
-  private rateLimit: GitHubRateLimit = {};
+  private readonly rateLimits = new Map<string, GitHubRateLimit>();
 
   public constructor(
     private readonly token: string | undefined,
@@ -25,8 +29,14 @@ export class GitHubClient {
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
   ) {}
 
-  public get sourceMetadata(): GitHubRateLimit {
-    return { ...this.rateLimit };
+  public get sourceMetadata(): GitHubSourceMetadata {
+    return {
+      resources: Object.fromEntries(
+        [...this.rateLimits.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([resource, quota]) => [resource, { ...quota }]),
+      ),
+    };
   }
 
   public async getJson<T>(path: string, accept = 'application/vnd.github+json'): Promise<T> {
@@ -71,23 +81,31 @@ export class GitHubClient {
   }
 
   private updateRateLimit(headers: Headers): void {
+    const resource = headers.get('x-ratelimit-resource') ?? 'unknown';
     const limit = parseInteger(headers.get('x-ratelimit-limit'));
     const remaining = parseInteger(headers.get('x-ratelimit-remaining'));
     const resetAt = parseReset(headers.get('x-ratelimit-reset'));
-    this.rateLimit = {
-      ...(limit === undefined
-        ? this.rateLimit.limit === undefined
-          ? {}
-          : { limit: this.rateLimit.limit }
-        : { limit: Math.max(limit, this.rateLimit.limit ?? 0) }),
-      ...(remaining === undefined
-        ? this.rateLimit.remaining === undefined
-          ? {}
-          : { remaining: this.rateLimit.remaining }
-        : { remaining: Math.min(remaining, this.rateLimit.remaining ?? remaining) }),
+    if (limit === undefined && remaining === undefined && resetAt === undefined) return;
+    const candidate: GitHubRateLimit = {
+      ...(limit === undefined ? {} : { limit }),
+      ...(remaining === undefined ? {} : { remaining }),
       ...(resetAt === undefined ? {} : { resetAt }),
     };
+    const current = this.rateLimits.get(resource);
+    if (!current || isMoreConstrained(candidate, current)) this.rateLimits.set(resource, candidate);
   }
+}
+
+function isMoreConstrained(candidate: GitHubRateLimit, current: GitHubRateLimit): boolean {
+  const candidateRemaining = candidate.remaining ?? Number.POSITIVE_INFINITY;
+  const currentRemaining = current.remaining ?? Number.POSITIVE_INFINITY;
+  if (candidateRemaining !== currentRemaining) return candidateRemaining < currentRemaining;
+  const candidateReset = candidate.resetAt ?? '';
+  const currentReset = current.resetAt ?? '';
+  if (candidateReset !== currentReset) return candidateReset > currentReset;
+  return (
+    (candidate.limit ?? Number.POSITIVE_INFINITY) < (current.limit ?? Number.POSITIVE_INFINITY)
+  );
 }
 
 function retryDelay(response: Response, attempt: number): number {

@@ -68,13 +68,16 @@ export class ObservationStore {
   public async persistBatch(
     run: CollectionRun,
     observations: ObservationInput[],
-    checkpoint: CheckpointInput,
+    checkpoint: CheckpointInput | undefined,
     completion: RunCompletion,
   ): Promise<number> {
     for (const observation of observations) {
       if (observation.source !== run.source || observation.scope !== run.scope) {
         throw new Error('Observation source and scope must match its collection run');
       }
+    }
+    if (checkpoint && completion.status !== 'succeeded') {
+      throw new Error('Only a succeeded collection run may advance a checkpoint');
     }
     const client = await this.database.connect();
     try {
@@ -83,25 +86,6 @@ export class ObservationStore {
       for (const observation of observations) {
         inserted += await this.insertObservation(client, run.id, observation);
       }
-      await client.query(
-        `INSERT INTO source_checkpoints
-           (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id)
-         VALUES ($1, $2, $3, $4::jsonb, $5, $6)
-         ON CONFLICT (source, scope, checkpoint_key) DO UPDATE
-         SET cursor = EXCLUDED.cursor,
-             cursor_at = EXCLUDED.cursor_at,
-             collection_run_id = EXCLUDED.collection_run_id,
-             advanced_at = now()
-         WHERE source_checkpoints.cursor_at <= EXCLUDED.cursor_at`,
-        [
-          run.source,
-          run.scope,
-          checkpoint.key,
-          JSON.stringify(checkpoint.cursor),
-          checkpoint.observedAt,
-          run.id,
-        ],
-      );
       const completed = await client.query(
         `UPDATE collection_runs
          SET status = $2, finished_at = now(), source_metadata = $3::jsonb, error_summary = $4
@@ -114,6 +98,41 @@ export class ObservationStore {
         ],
       );
       if (completed.rowCount !== 1) throw new Error('Collection run was not in running state');
+      if (checkpoint) {
+        await client.query(
+          `INSERT INTO source_checkpoints
+           (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id)
+         VALUES ($1, $2, $3, $4::jsonb, $5, $6)
+         ON CONFLICT (source, scope, checkpoint_key) DO UPDATE
+         SET cursor = EXCLUDED.cursor,
+             cursor_at = EXCLUDED.cursor_at,
+             collection_run_id = EXCLUDED.collection_run_id,
+             advanced_at = now()
+         WHERE source_checkpoints.cursor_at <= EXCLUDED.cursor_at`,
+          [
+            run.source,
+            run.scope,
+            checkpoint.key,
+            JSON.stringify(checkpoint.cursor),
+            checkpoint.observedAt,
+            run.id,
+          ],
+        );
+        await client.query(
+          `INSERT INTO source_checkpoint_history
+             (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id)
+           VALUES ($1, $2, $3, $4::jsonb, $5, $6)
+           ON CONFLICT (collection_run_id, checkpoint_key) DO NOTHING`,
+          [
+            run.source,
+            run.scope,
+            checkpoint.key,
+            JSON.stringify(checkpoint.cursor),
+            checkpoint.observedAt,
+            run.id,
+          ],
+        );
+      }
       await client.query('COMMIT');
       return inserted;
     } catch (error) {
