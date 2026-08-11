@@ -2,7 +2,10 @@ import { dayBucket, type JsonValue, type ObservationInput } from '../domain/obse
 import type { CollectionRun, ObservationStore } from '../db/observation-store.js';
 import type { GitHubClient } from './client.js';
 
-type CollectionStore = Pick<ObservationStore, 'beginRun' | 'finishRun' | 'persistBatch'>;
+type CollectionStore = Pick<
+  ObservationStore,
+  'beginRun' | 'finishRun' | 'persistBatch' | 'withCollectionLock'
+>;
 type GitHubReader = Pick<GitHubClient, 'getJson' | 'sourceMetadata'>;
 
 interface RepositoryResponse {
@@ -71,6 +74,19 @@ export async function collectGitHub(
   owner: string,
   repository: string,
   now: Date = new Date(),
+): Promise<GitHubCollectionResult> {
+  const scope = `${owner}/${repository}`;
+  return store.withCollectionLock(source, scope, () =>
+    collectGitHubWithLock(client, store, owner, repository, now),
+  );
+}
+
+async function collectGitHubWithLock(
+  client: GitHubReader,
+  store: CollectionStore,
+  owner: string,
+  repository: string,
+  now: Date,
 ): Promise<GitHubCollectionResult> {
   const scope = `${owner}/${repository}`;
   const run = await store.beginRun(source, scope);

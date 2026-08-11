@@ -26,6 +26,33 @@ export interface RunCompletion {
 export class ObservationStore {
   public constructor(private readonly database: Database) {}
 
+  public async withCollectionLock<T>(
+    source: string,
+    scope: string,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const client = await this.database.connect();
+    try {
+      const lock = await client.query<{ acquired: boolean }>(
+        'SELECT pg_try_advisory_lock(hashtext($1), hashtext($2)) AS acquired',
+        [source, scope],
+      );
+      if (!lock.rows[0]?.acquired) {
+        throw new Error(`A collection is already running for ${source}:${scope}`);
+      }
+      try {
+        return await action();
+      } finally {
+        await client.query('SELECT pg_advisory_unlock(hashtext($1), hashtext($2))', [
+          source,
+          scope,
+        ]);
+      }
+    } finally {
+      client.release();
+    }
+  }
+
   public async beginRun(source: string, scope: string): Promise<CollectionRun> {
     const result = await this.database.query<CollectionRun>(
       `INSERT INTO collection_runs (source, scope, status)

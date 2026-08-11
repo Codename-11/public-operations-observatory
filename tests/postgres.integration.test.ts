@@ -239,6 +239,15 @@ integration('PostgreSQL operating loop', () => {
     expect(left).toEqual([]);
     expect(right).toEqual([]);
   });
+
+  it('rejects overlapping collectors for the same source and scope', async () => {
+    const store = new ObservationStore(database);
+    await store.withCollectionLock('github', scope, async () => {
+      await expect(
+        store.withCollectionLock('github', scope, () => Promise.resolve()),
+      ).rejects.toThrow(`A collection is already running for github:${scope}`);
+    });
+  });
 });
 
 async function cleanup(database: Database): Promise<void> {

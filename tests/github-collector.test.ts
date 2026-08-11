@@ -74,6 +74,10 @@ class FakeStore {
     return Promise.resolve({ id: 'run-1', source, scope });
   }
 
+  public withCollectionLock<T>(_source: string, _scope: string, action: () => Promise<T>) {
+    return action();
+  }
+
   public persistBatch(
     _run: CollectionRun,
     observations: ObservationInput[],
