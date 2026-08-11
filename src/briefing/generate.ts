@@ -98,6 +98,7 @@ export async function generateWeeklyBriefing(
         `SELECT occurred_at, kind, title, evidence_url, note
        FROM annotations
        WHERE scope = $1 AND occurred_at >= $2 AND occurred_at < $3
+         AND created_at <= $3
        ORDER BY occurred_at, kind, title`,
         [options.scope, options.windowStart, options.windowEnd],
       ),

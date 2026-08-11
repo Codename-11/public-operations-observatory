@@ -190,6 +190,13 @@ integration('PostgreSQL operating loop', () => {
       ],
     );
     await expect(normalizeGitHubObservations(database, scope)).resolves.toBe(1);
+    await database.query(
+      `INSERT INTO annotations
+         (scope, occurred_at, kind, title, evidence_url, created_at)
+       VALUES ($1, $2, 'communication', 'Late backdated annotation',
+         'https://example.com/late', $3)`,
+      [scope, new Date('2026-08-09T12:00:00Z'), new Date('2026-08-13T00:00:00Z')],
+    );
     const regenerated = await generateWeeklyBriefing(database, briefingOptions);
     expect(regenerated.digest).toBe(result.digest);
     await expect(
@@ -222,6 +229,9 @@ integration('PostgreSQL operating loop', () => {
       [newerRun.id],
     );
     expect(completedRun.rows[0]?.status).toBe('succeeded');
+    await expect(
+      database.query("UPDATE collection_runs SET status = 'failed' WHERE id = $1", [newerRun.id]),
+    ).rejects.toThrow('a collection run referenced by a checkpoint must remain succeeded');
     const olderRun = await store.beginRun('github', scope);
     await store.persistBatch(
       olderRun,
@@ -306,9 +316,19 @@ integration('PostgreSQL operating loop', () => {
       [scope, new Date('2026-05-01T00:00:00Z'), oldRun.rows[0]?.id],
     );
     await expect(normalizeGitHubObservations(database, scope)).resolves.toBe(1);
+    await database.query(
+      `INSERT INTO observations
+         (source, scope, record_kind, external_id, observed_bucket, schema_version,
+          payload, payload_digest, evidence_url, collection_run_id, created_at)
+       VALUES ('github', $1, 'unsupported.summary', 'unsupported', $2, 99,
+         '{}'::jsonb, 'expired-unsupported', 'https://github.com/test/example', $3, $2)`,
+      [scope, new Date('2026-05-02T00:00:00Z'), oldRun.rows[0]?.id],
+    );
     const result = await applyRetention(database, new Date('2026-08-11T00:00:00Z'));
     expect(result.diagnosticsRedacted).toBeGreaterThan(0);
-    expect(result.rawObservationsDeleted).toBe(1);
+    expect(result.rawObservationsDeleted).toBe(2);
+    expect(result.unnormalizedRawObservationsDeleted).toBe(1);
+    expect(result.rawObservationsOverdue).toBe(0);
     const retained = await database.query<{
       error_summary: string | null;
       source_metadata: object;
