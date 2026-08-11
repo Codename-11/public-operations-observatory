@@ -1,0 +1,10 @@
+[Unit]
+Description=Generate Public Operations Observatory weekly briefing
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/public-operations-observatory
+EnvironmentFile=%h/.config/public-operations-observatory/environment
+ExecStart=/usr/bin/env corepack pnpm briefing:weekly

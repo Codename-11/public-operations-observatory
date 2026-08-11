@@ -31,7 +31,7 @@ corepack pnpm briefing:weekly
 corepack pnpm maintenance:retention
 ```
 
-Briefings are written under `./out` by default. Use `briefing weekly --end YYYY-MM-DD` through `src/cli.ts` when reproducing a fixed UTC window.
+Briefings are written under `./out` by default. Without `--end`, the CLI uses the most recent completed Monday-to-Monday UTC week. Use `briefing weekly --end YYYY-MM-DD` through `src/cli.ts` to reproduce another fixed UTC window.
 
 ## Quality gates
 
@@ -46,4 +46,10 @@ docker compose config --quiet
 
 ## Scheduling
 
-Run `collect:github` at least daily, `briefing:weekly` once per week after collection, and `maintenance:retention` daily. The retention command redacts diagnostic details after 30 days and records each policy execution in `retention_runs`; the aggregate observations remain durable. Add release, documentation, and major public-communication annotations before generating the briefing; annotations record chronology, never causation. The commands are process-manager agnostic; deployment-specific cron, backup, secret, and network configuration stays outside this public repository.
+Run `collect:github` at least daily, `briefing:weekly` once per week after collection, and `maintenance:retention` daily. Durable systemd service/timer templates for all three jobs live under `ops/systemd/`; copy them to `~/.config/systemd/user/`, adjust the working directory if needed, then enable the timers with `systemctl --user enable --now public-operations-observatory-{collect,briefing,retention}.timer`. `Persistent=true` catches up missed runs after downtime.
+
+The retention command redacts diagnostic details after 30 days and records each policy execution in `retention_runs`; aggregate observations remain durable. Add release, documentation, and major public-communication annotations before generating the briefing; annotations record chronology, never causation.
+
+Deployment-specific backup transport, secret, and network configuration stays outside this public repository. To exercise a backup restore against a disposable database, set `DATABASE_URL`, `OBSERVATORY_RESTORE_DATABASE_URL`, and `OBSERVATORY_BACKUP_TEST_DIR`, then run `corepack pnpm maintenance:verify-restore`. The command creates a custom-format dump, restores it, compares migration and observation counts, and removes the disposable database.
+
+The collector obtains star totals only from the public repository summary. It deliberately does not call GitHub's identity-bearing stargazer-history endpoint; daily snapshots provide the durable star history without receiving account identities.

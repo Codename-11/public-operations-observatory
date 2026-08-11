@@ -82,7 +82,10 @@ integration('PostgreSQL operating loop', () => {
           observedAt: new Date('2026-08-10T14:00:00Z'),
           cursor: { observedAt: '2026-08-10T14:00:00Z' },
         },
-        { status: 'succeeded' },
+        {
+          status: 'succeeded',
+          sourceMetadata: { remaining: 4_321, resetAt: '2026-08-10T15:00:00.000Z' },
+        },
       ),
     ).toBe(1);
 
@@ -129,6 +132,8 @@ integration('PostgreSQL operating loop', () => {
     };
     const result = await generateWeeklyBriefing(database, briefingOptions);
     expect(result.markdown).toContain('| GitHub stars | 13 |');
+    expect(result.markdown).toContain('Last successful checkpoint: 2026-08-10T14:00:00.000Z.');
+    expect(result.markdown).toContain('GitHub API rate limit: 4,321 requests remaining');
     expect(result.markdown).toContain('[source](<https://github.com/test/example>)');
     expect(result.markdown).toContain(
       '[Example release](<https://github.com/test/example/releases/tag/v1.0.0>)',
@@ -137,12 +142,27 @@ integration('PostgreSQL operating loop', () => {
       '[\\[unsafe\\]\\(https://invalid.example\\) &lt;script&gt;](<https://example.com/evidence_(safe)>)',
     );
     expect(result.markdown).not.toContain('9,999');
+    const normalized = await database.query<{ metric_key: string; value_numeric: string }>(
+      `SELECT metric_key, value_numeric::text
+       FROM normalized_metric_observations
+       WHERE scope = $1 AND metric_key = 'github.stars'
+       ORDER BY created_at DESC LIMIT 1`,
+      [scope],
+    );
+    expect(normalized.rows[0]).toEqual({ metric_key: 'github.stars', value_numeric: '13' });
 
-    await database.query(
+    const futureRun = await database.query<{ id: string }>(
       `INSERT INTO collection_runs
          (source, scope, status, started_at, finished_at, error_summary)
-       VALUES ('github', $1, 'partial', $2, $2, 'future diagnostic')`,
+       VALUES ('github', $1, 'succeeded', $2, $2, 'future diagnostic')
+       RETURNING id`,
       [scope, new Date('2026-08-13T00:00:00Z')],
+    );
+    await database.query(
+      `INSERT INTO source_checkpoint_history
+         (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id)
+       VALUES ('github', $1, 'daily-collection', '{}'::jsonb, $2, $3)`,
+      [scope, new Date('2026-08-13T00:00:00Z'), futureRun.rows[0]?.id],
     );
     await database.query(
       `INSERT INTO observations
@@ -273,6 +293,7 @@ integration('PostgreSQL operating loop', () => {
 async function cleanup(database: Database): Promise<void> {
   await database.query('DELETE FROM briefing_revisions WHERE scope = $1', [scope]);
   await database.query('DELETE FROM annotations WHERE scope = $1', [scope]);
+  await database.query('DELETE FROM source_checkpoint_history WHERE scope = $1', [scope]);
   await database.query('DELETE FROM source_checkpoints WHERE scope = $1', [scope]);
   await database.query('DELETE FROM observations WHERE scope = $1', [scope]);
   await database.query('DELETE FROM collection_runs WHERE scope = $1', [scope]);

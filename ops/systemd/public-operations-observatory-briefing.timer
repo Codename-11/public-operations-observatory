@@ -1,0 +1,10 @@
+[Unit]
+Description=Generate Public Operations Observatory weekly briefing
+
+[Timer]
+OnCalendar=Mon *-*-* 03:00:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

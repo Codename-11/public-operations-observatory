@@ -68,7 +68,7 @@ export class ObservationStore {
   public async persistBatch(
     run: CollectionRun,
     observations: ObservationInput[],
-    checkpoint: CheckpointInput,
+    checkpoint: CheckpointInput | undefined,
     completion: RunCompletion,
   ): Promise<number> {
     for (const observation of observations) {
@@ -83,8 +83,9 @@ export class ObservationStore {
       for (const observation of observations) {
         inserted += await this.insertObservation(client, run.id, observation);
       }
-      await client.query(
-        `INSERT INTO source_checkpoints
+      if (checkpoint) {
+        await client.query(
+          `INSERT INTO source_checkpoints
            (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id)
          VALUES ($1, $2, $3, $4::jsonb, $5, $6)
          ON CONFLICT (source, scope, checkpoint_key) DO UPDATE
@@ -93,15 +94,30 @@ export class ObservationStore {
              collection_run_id = EXCLUDED.collection_run_id,
              advanced_at = now()
          WHERE source_checkpoints.cursor_at <= EXCLUDED.cursor_at`,
-        [
-          run.source,
-          run.scope,
-          checkpoint.key,
-          JSON.stringify(checkpoint.cursor),
-          checkpoint.observedAt,
-          run.id,
-        ],
-      );
+          [
+            run.source,
+            run.scope,
+            checkpoint.key,
+            JSON.stringify(checkpoint.cursor),
+            checkpoint.observedAt,
+            run.id,
+          ],
+        );
+        await client.query(
+          `INSERT INTO source_checkpoint_history
+             (source, scope, checkpoint_key, cursor, cursor_at, collection_run_id)
+           VALUES ($1, $2, $3, $4::jsonb, $5, $6)
+           ON CONFLICT (collection_run_id, checkpoint_key) DO NOTHING`,
+          [
+            run.source,
+            run.scope,
+            checkpoint.key,
+            JSON.stringify(checkpoint.cursor),
+            checkpoint.observedAt,
+            run.id,
+          ],
+        );
+      }
       const completed = await client.query(
         `UPDATE collection_runs
          SET status = $2, finished_at = now(), source_metadata = $3::jsonb, error_summary = $4

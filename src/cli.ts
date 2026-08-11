@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { loadEnvFile } from 'node:process';
 
 import { generateWeeklyBriefing } from './briefing/generate.js';
+import { latestCompletedUtcWeekEnd } from './briefing/window.js';
 import { loadConfig } from './config.js';
 import { addAnnotation, type AnnotationKind } from './db/annotations.js';
 import { createDatabase } from './db/client.js';
@@ -93,7 +94,7 @@ async function main(): Promise<void> {
 
 function parseWindowEnd(arguments_: string[]): Date {
   const index = arguments_.indexOf('--end');
-  if (index === -1) return new Date();
+  if (index === -1) return latestCompletedUtcWeekEnd(new Date());
   const value = arguments_[index + 1];
   if (!value) throw new Error('--end requires an ISO date');
   const parsed = new Date(`${value}T00:00:00.000Z`);

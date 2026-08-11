@@ -13,6 +13,7 @@
     "briefing:weekly": "tsx src/cli.ts briefing weekly",
     "db:migrate": "tsx src/cli.ts db migrate",
     "maintenance:retention": "tsx src/cli.ts maintenance retention",
+    "maintenance:verify-restore": "bash scripts/verify-backup-restore.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",

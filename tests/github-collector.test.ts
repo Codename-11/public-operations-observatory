@@ -8,7 +8,10 @@ class FakeGitHubReader {
   public readonly sourceMetadata = { remaining: 4990 };
   public readonly requestedPaths: string[] = [];
 
-  public constructor(private readonly privateRepository = false) {}
+  public constructor(
+    private readonly privateRepository = false,
+    private readonly failTraffic = false,
+  ) {}
 
   public getJson<T>(path: string): Promise<T> {
     this.requestedPaths.push(path);
@@ -24,6 +27,7 @@ class FakeGitHubReader {
         visibility: this.privateRepository ? 'private' : 'public',
       };
     } else if (path.includes('/traffic/views')) {
+      if (this.failTraffic) throw new Error('traffic unavailable');
       value = {
         count: 20,
         uniques: 15,
@@ -57,8 +61,6 @@ class FakeGitHubReader {
           assets: [{ id: 10, download_count: 25 }],
         },
       ];
-    } else if (path.includes('/stargazers')) {
-      value = [{ starred_at: '2026-08-10T01:00:00Z' }, { starred_at: '2026-08-10T02:00:00Z' }];
     } else {
       throw new Error(`Unexpected path: ${path}`);
     }
@@ -67,6 +69,7 @@ class FakeGitHubReader {
 }
 
 class FakeStore {
+  public checkpoint: CheckpointInput | undefined;
   public persisted: ObservationInput[] = [];
   public status = '';
 
@@ -81,10 +84,11 @@ class FakeStore {
   public persistBatch(
     _run: CollectionRun,
     observations: ObservationInput[],
-    _checkpoint: CheckpointInput,
+    checkpoint: CheckpointInput | undefined,
     completion: RunCompletion,
   ) {
     this.persisted = observations;
+    this.checkpoint = checkpoint;
     this.status = completion.status;
     return Promise.resolve(observations.length);
   }
@@ -98,8 +102,9 @@ class FakeStore {
 describe('collectGitHub', () => {
   it('collects aggregate public signals without stargazer identities', async () => {
     const store = new FakeStore();
+    const reader = new FakeGitHubReader();
     const result = await collectGitHub(
-      new FakeGitHubReader(),
+      reader,
       store,
       'Codename-11',
       'hermes-relay',
@@ -117,12 +122,12 @@ describe('collectGitHub', () => {
         'pulls.summary',
         'workflows.summary',
         'release.summary',
-        'stars.daily',
       ]),
     );
     const serialized = JSON.stringify(store.persisted);
     expect(serialized).not.toContain('login');
     expect(serialized).not.toContain('user');
+    expect(reader.requestedPaths.some((path) => path.includes('/stargazers'))).toBe(false);
   });
 
   it('rejects a private repository before requesting any secondary endpoint', async () => {
@@ -135,5 +140,20 @@ describe('collectGitHub', () => {
     expect(reader.requestedPaths).toEqual(['/repos/Codename-11/hermes-relay']);
     expect(store.persisted).toEqual([]);
     expect(store.status).toBe('failed');
+  });
+
+  it('does not advance the successful checkpoint for a partial collection', async () => {
+    const store = new FakeStore();
+    const result = await collectGitHub(
+      new FakeGitHubReader(false, true),
+      store,
+      'Codename-11',
+      'hermes-relay',
+      new Date('2026-08-11T12:00:00Z'),
+    );
+
+    expect(result.errors).toContain('traffic-views: traffic unavailable');
+    expect(store.status).toBe('partial');
+    expect(store.checkpoint).toBeUndefined();
   });
 });
