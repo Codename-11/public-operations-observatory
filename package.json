@@ -9,18 +9,32 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "build:root": "tsc -p tsconfig.build.json",
+    "build:workspace": "corepack pnpm --recursive --include-workspace-root --if-present run build:root && corepack pnpm --recursive --filter './apps/**' --filter './packages/**' --if-present run build",
     "collect:github": "tsx src/cli.ts collect github",
     "normalize:github": "tsx src/cli.ts normalize github",
     "briefing:weekly": "tsx src/cli.ts briefing weekly",
     "db:migrate": "tsx src/cli.ts db migrate",
     "maintenance:retention": "tsx src/cli.ts maintenance retention",
     "maintenance:verify-restore": "bash scripts/verify-backup-restore.sh",
+    "db:verify-read-role": "psql \"${DATABASE_URL:?DATABASE_URL is required}\" -v ON_ERROR_STOP=1 -f scripts/verify-read-model-role.sql",
     "format": "prettier --write .",
+    "format:root": "prettier --write .",
+    "format:workspace": "corepack pnpm --recursive --include-workspace-root --if-present run format:root && corepack pnpm --recursive --filter './apps/**' --filter './packages/**' --if-present run format",
     "format:check": "prettier --check .",
+    "format:check:root": "prettier --check .",
+    "format:check:workspace": "corepack pnpm --recursive --include-workspace-root --if-present run format:check:root && corepack pnpm --recursive --filter './apps/**' --filter './packages/**' --if-present run format:check",
     "lint": "eslint .",
+    "lint:root": "eslint .",
+    "lint:workspace": "corepack pnpm --recursive --include-workspace-root --if-present run lint:root && corepack pnpm --recursive --filter './apps/**' --filter './packages/**' --if-present run lint",
     "test": "vitest run",
+    "test:root": "vitest run",
+    "test:workspace": "corepack pnpm --recursive --include-workspace-root --if-present run test:root && corepack pnpm --recursive --filter './apps/**' --filter './packages/**' --if-present run test",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "typecheck:root": "tsc --noEmit",
+    "typecheck:workspace": "corepack pnpm --recursive --include-workspace-root --if-present run typecheck:root && corepack pnpm --recursive --filter './apps/**' --filter './packages/**' --if-present run typecheck"
   },
   "dependencies": {
     "pg": "^8.16.3",
@@ -28,6 +42,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^22.18.0",
     "@types/pg": "^8.15.5",
     "eslint": "^9.34.0",
@@ -37,5 +52,11 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.41.0",
     "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": ">=8.5.18",
+      "sharp": ">=0.35.0"
+    }
   }
 }

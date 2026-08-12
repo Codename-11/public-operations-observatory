@@ -137,7 +137,47 @@ integration('PostgreSQL operating loop', () => {
       [scope, new Date('2026-08-10T00:00:00Z'), changedRun.id],
     );
     await expect(normalizeGitHubObservations(database, scope)).resolves.toBe(2);
-
+    await database.query(
+      `UPDATE collection_runs
+       SET started_at = checkpoint.cursor_at,
+           finished_at = checkpoint.cursor_at
+       FROM source_checkpoint_history checkpoint
+       WHERE collection_runs.id = checkpoint.collection_run_id
+         AND collection_runs.scope = $1`,
+      [scope],
+    );
+    await database.query(
+      `UPDATE observations
+       SET created_at = observed_bucket + interval '12 hours'
+       WHERE scope = $1`,
+      [scope],
+    );
+    await database.query(
+      `UPDATE normalized_records
+       SET source_created_at = effective_at + interval '12 hours'
+           + CASE WHEN payload ->> 'stars' = '13' THEN interval '2 hours' ELSE interval '0 hours' END,
+           normalized_at = effective_at + interval '12 hours'
+           + CASE WHEN payload ->> 'stars' = '13' THEN interval '2 hours' ELSE interval '0 hours' END
+       WHERE scope = $1`,
+      [scope],
+    );
+    await database.query(
+      `UPDATE source_checkpoint_history
+       SET recorded_at = cursor_at
+       WHERE scope = $1`,
+      [scope],
+    );
+    await database.query(
+      `INSERT INTO annotations
+         (scope, occurred_at, kind, title, evidence_url, created_at)
+       VALUES
+         ($1, '2026-08-09T10:00:00Z', 'release', 'Historical release',
+          'https://github.com/test/example/releases/tag/v1.0.0', '2026-08-09T10:00:00Z'),
+         ($1, '2026-08-09T11:00:00Z', 'communication',
+          '[historical unsafe](https://invalid.example) <script>',
+          'https://example.com/evidence_(safe)', '2026-08-09T11:00:00Z')`,
+      [scope],
+    );
     const briefingOptions = {
       scope,
       windowStart: new Date('2026-08-04T00:00:00Z'),
@@ -151,10 +191,10 @@ integration('PostgreSQL operating loop', () => {
     expect(result.markdown).toContain('GitHub API core rate limit: 4,321 requests remaining');
     expect(result.markdown).toContain('[source](<https://github.com/test/example>)');
     expect(result.markdown).toContain(
-      '[Example release](<https://github.com/test/example/releases/tag/v1.0.0>)',
+      '[Historical release](<https://github.com/test/example/releases/tag/v1.0.0>)',
     );
     expect(result.markdown).toContain(
-      '[\\[unsafe\\]\\(https://invalid.example\\) &lt;script&gt;](<https://example.com/evidence_(safe)>)',
+      '[\\[historical unsafe\\]\\(https://invalid.example\\) &lt;script&gt;](<https://example.com/evidence_(safe)>)',
     );
     expect(result.markdown).not.toContain('9,999');
     const normalized = await database.query<{ metric_key: string; value_numeric: string }>(

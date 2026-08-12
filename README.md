@@ -2,12 +2,13 @@
 
 Public Operations Observatory preserves durable, evidence-linked public product signals and turns them into restrained operating briefings.
 
-The Phase 0 program is intentionally GitHub-first. Its first runnable release, v0.1, provides a PostgreSQL-backed idempotent GitHub collector, explicit checkpoints and provenance, release/documentation/communication annotations, and a weekly Markdown briefing for Hermes-Relay. It does not include a dashboard, Google Play, multi-tenancy, a plugin marketplace, or public action execution.
+The Phase 0 program is intentionally GitHub-first. Its first runnable release, v0.1, provides a PostgreSQL-backed idempotent GitHub collector, explicit checkpoints and provenance, release/documentation/communication annotations, and a weekly Markdown briefing for Hermes-Relay. Phase 1 adds a private, authenticated, evidence-backed Overview served by a Next.js web process through the Overview API; it is not a public dashboard and does not add Google Play, multi-tenancy, a plugin marketplace, or public action execution.
 
 See:
 
 - [Phase 0 contract](docs/phase-0-contract.md)
 - [Website analytics decision](docs/analytics-decision.md)
+- [Phase 1 private deployment](docs/phase-1-deployment.md)
 
 The existing self-hosted Umami deployment is approved as a separate aggregate-only input. Its adapter remains gated on the reviewed CTA allowlist, privacy notice, retention configuration, and transmission validation; it does not block the GitHub collector or weekly briefing.
 
@@ -38,13 +39,20 @@ Briefings are written under `./out` by default. Without `--end`, the CLI uses th
 ## Quality gates
 
 ```bash
+corepack pnpm install --frozen-lockfile
+corepack pnpm build:workspace
 corepack pnpm format:check
-corepack pnpm lint
-corepack pnpm typecheck
-corepack pnpm test
-corepack pnpm build
+corepack pnpm lint:workspace
+corepack pnpm typecheck:workspace
+corepack pnpm test:workspace
+corepack pnpm test:e2e
+corepack pnpm audit --audit-level high
 docker compose config --quiet
 ```
+
+Playwright uses a loopback-only deterministic fixture API that returns contract-valid Overview responses. It does not add a production mock fallback. With migrated test PostgreSQL running, `DATABASE_URL=... corepack pnpm db:verify-read-role` verifies the dedicated read-model role can perform only the normalized/durable reads required by the Overview and cannot read raw observations or write durable data.
+
+The Phase 1 web/API token is server-only: set `OBSERVATORY_API_TOKEN` on the Next.js server and matching `API_AUTH_TOKEN` on the private API. Never use a `NEXT_PUBLIC_` token or expose the API to the browser. Browser analytics, telemetry, URL unfurls, and remote previews remain prohibited until the CTA allowlist, privacy notice, retention, and transmission-validation gate is satisfied. See the deployment guide for TLS/auth proxy, no-store, timeout, and least-privilege details.
 
 ## Scheduling
 
