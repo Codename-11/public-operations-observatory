@@ -1,13 +1,8 @@
 node_modules/
 dist/
 coverage/
-.next/
 .test-output/
 playwright-report/
 test-results/
-.env
-.env.*
-!.env.example
-*.log
+.next/
 *.tsbuildinfo
-.DS_Store
