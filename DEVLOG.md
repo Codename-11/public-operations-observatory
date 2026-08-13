@@ -20,3 +20,9 @@
 - Added repeatable least-privilege PostgreSQL grant verification: required normalized/durable read-model SELECTs succeed while raw observation reads and durable writes are denied.
 - Documented the private TLS/auth-proxy boundary, server-only web-to-API token, explicit database grants, no-store/deadline requirements, and analytics prohibition gate.
 - Published an unlisted, visibly labelled deterministic fixture review artifact and captured desktop/mobile visual evidence; it is review-only and does not represent production data or deployment.
+
+## 2026-08-13 — Phase 1 CI configuration isolation
+
+- Fixed the PostgreSQL CI lane failing before migration because GitHub Actions injects `GITHUB_REPOSITORY` as `owner/repository`, while the collector expected that name to contain a bare repository slug.
+- Namespaced collector target configuration as `OBSERVATORY_GITHUB_OWNER` and `OBSERVATORY_GITHUB_REPOSITORY` so platform metadata cannot override application configuration.
+- Added regression coverage for the GitHub Actions environment collision and reverified the workspace, PostgreSQL, least-privilege read-role, and browser lanes.
