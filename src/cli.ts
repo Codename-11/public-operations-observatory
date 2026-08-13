@@ -35,12 +35,12 @@ async function main(): Promise<void> {
       const result = await collectGitHub(
         client,
         store,
-        config.GITHUB_OWNER,
-        config.GITHUB_REPOSITORY,
+        config.OBSERVATORY_GITHUB_OWNER,
+        config.OBSERVATORY_GITHUB_REPOSITORY,
       );
       const normalized = await normalizeGitHubObservations(
         database,
-        `${config.GITHUB_OWNER}/${config.GITHUB_REPOSITORY}`,
+        `${config.OBSERVATORY_GITHUB_OWNER}/${config.OBSERVATORY_GITHUB_REPOSITORY}`,
       );
       console.log(JSON.stringify({ ...result, normalized }));
       if (result.errors.length > 0) process.exitCode = 2;
@@ -51,7 +51,7 @@ async function main(): Promise<void> {
       await migrate(database);
       const normalized = await normalizeGitHubObservations(
         database,
-        `${config.GITHUB_OWNER}/${config.GITHUB_REPOSITORY}`,
+        `${config.OBSERVATORY_GITHUB_OWNER}/${config.OBSERVATORY_GITHUB_REPOSITORY}`,
       );
       console.log(JSON.stringify({ normalized }));
       return;
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
       const windowEnd = parseWindowEnd(arguments_);
       const windowStart = new Date(windowEnd.getTime() - 7 * 24 * 60 * 60 * 1_000);
       const result = await generateWeeklyBriefing(database, {
-        scope: `${config.GITHUB_OWNER}/${config.GITHUB_REPOSITORY}`,
+        scope: `${config.OBSERVATORY_GITHUB_OWNER}/${config.OBSERVATORY_GITHUB_REPOSITORY}`,
         windowStart,
         windowEnd,
         outputDirectory: resolve(config.OBSERVATORY_OUTPUT_DIR),
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
         throw new Error('--kind must be release, documentation, communication, or other');
       }
       const id = await addAnnotation(database, {
-        scope: `${config.GITHUB_OWNER}/${config.GITHUB_REPOSITORY}`,
+        scope: `${config.OBSERVATORY_GITHUB_OWNER}/${config.OBSERVATORY_GITHUB_REPOSITORY}`,
         occurredAt,
         kind,
         title: requireFlag(flags, 'title'),

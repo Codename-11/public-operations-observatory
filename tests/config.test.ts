@@ -7,16 +7,26 @@ describe('loadConfig', () => {
     expect(() =>
       loadConfig({
         DATABASE_URL: 'postgresql://localhost/observatory',
-        GITHUB_OWNER: '../escape',
-        GITHUB_REPOSITORY: 'project',
+        OBSERVATORY_GITHUB_OWNER: '../escape',
+        OBSERVATORY_GITHUB_REPOSITORY: 'project',
       }),
     ).toThrow();
     expect(() =>
       loadConfig({
         DATABASE_URL: 'postgresql://localhost/observatory',
-        GITHUB_OWNER: 'owner',
-        GITHUB_REPOSITORY: '..',
+        OBSERVATORY_GITHUB_OWNER: 'owner',
+        OBSERVATORY_GITHUB_REPOSITORY: '..',
       }),
     ).toThrow();
+  });
+
+  it('does not treat GitHub Actions metadata as collector configuration', () => {
+    const config = loadConfig({
+      DATABASE_URL: 'postgresql://localhost/observatory',
+      GITHUB_REPOSITORY: 'Codename-11/public-operations-observatory',
+    });
+
+    expect(config.OBSERVATORY_GITHUB_OWNER).toBe('Codename-11');
+    expect(config.OBSERVATORY_GITHUB_REPOSITORY).toBe('hermes-relay');
   });
 });

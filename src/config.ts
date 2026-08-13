@@ -10,8 +10,8 @@ const githubSlug = z
 export const configSchema = z.object({
   DATABASE_URL: z.string().url(),
   GITHUB_TOKEN: optionalToken,
-  GITHUB_OWNER: githubSlug.default('Codename-11'),
-  GITHUB_REPOSITORY: githubSlug.default('hermes-relay'),
+  OBSERVATORY_GITHUB_OWNER: githubSlug.default('Codename-11'),
+  OBSERVATORY_GITHUB_REPOSITORY: githubSlug.default('hermes-relay'),
   OBSERVATORY_OUTPUT_DIR: z.string().trim().min(1).default('./out'),
   OBSERVATORY_FRESHNESS_HOURS: z.coerce.number().positive().default(30),
 });
