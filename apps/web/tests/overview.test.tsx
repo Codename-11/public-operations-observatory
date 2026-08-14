@@ -183,6 +183,44 @@ describe('server Overview API client', () => {
     );
   });
 
+  it('allows a production server to call a loopback HTTP API', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(baseOverview()), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    try {
+      await expect(
+        fetchOverview('hermes-relay', {
+          fetcher,
+          baseUrl: 'http://127.0.0.1:4100',
+          token: 'server-only-token',
+        }),
+      ).resolves.toMatchObject({ ok: true });
+      expect(fetcher).toHaveBeenCalledWith(
+        'http://127.0.0.1:4100/api/v1/projects/hermes-relay/overview?period=7d',
+        expect.any(Object),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('rejects non-loopback plaintext API origins', async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      fetchOverview('hermes-relay', {
+        fetcher,
+        baseUrl: 'http://api.internal.example',
+        token: 'server-only-token',
+      }),
+    ).resolves.toMatchObject({ ok: false, kind: 'configuration' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['missing configuration', { baseUrl: '', token: '', fetcher: vi.fn() }],
     [
