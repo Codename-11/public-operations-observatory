@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 
-import { OverviewPanels } from '../../../components/overview/overview-panels';
+import { DataSurfaceResult } from '../../../components/data-surfaces/data-surface-result';
+import { ExecutivePulseSurface } from '../../../components/data-surfaces/executive-pulse-surface';
 import { fetchOverview } from '../../../lib/api';
 
-export const metadata: Metadata = { title: 'Hermes-Relay overview' };
+export const metadata: Metadata = { title: 'Hermes-Relay executive pulse' };
 export const dynamic = 'force-dynamic';
 
 export default async function ProjectOverviewPage({
@@ -12,5 +13,12 @@ export default async function ProjectOverviewPage({
   params: Promise<{ projectKey: string }>;
 }) {
   const { projectKey } = await params;
-  return <OverviewPanels result={await fetchOverview(projectKey)} />;
+  return (
+    <DataSurfaceResult
+      result={await fetchOverview(projectKey)}
+      surface={ExecutivePulseSurface}
+      eyebrow="Executive pulse"
+      heading="Hermes-Relay decision layer"
+    />
+  );
 }

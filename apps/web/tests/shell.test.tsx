@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ObservatoryShell } from '../components/shell/observatory-shell';
@@ -11,6 +11,9 @@ import {
   PanelState,
   StatusBadge,
 } from '@public-operations-observatory/ui';
+
+const navigationState = vi.hoisted(() => ({ pathname: '/projects/hermes-relay' }));
+vi.mock('next/navigation', () => ({ usePathname: () => navigationState.pathname }));
 
 const shell = (children = <h1>Hermes-Relay public operations</h1>) =>
   render(<ObservatoryShell projectKey="hermes-relay">{children}</ObservatoryShell>);
@@ -29,9 +32,14 @@ describe('Observatory shell', () => {
     expect(screen.getAllByText('Hermes-Relay')).not.toHaveLength(0);
     expect(
       within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', {
-        name: 'Overview',
+        name: 'Executive pulse',
       }),
     ).toHaveAttribute('aria-current', 'page');
+    expect(
+      within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', {
+        name: 'Reach & acquisition',
+      }),
+    ).not.toHaveAttribute('aria-current');
   });
 
   it('renders unsupported destinations as disabled text, never dead links', () => {
@@ -40,6 +48,14 @@ describe('Observatory shell', () => {
     expect(within(navigation).getByText('Attention')).toHaveAttribute('aria-disabled', 'true');
     expect(within(navigation).queryByRole('link', { name: 'Attention' })).not.toBeInTheDocument();
     expect(within(navigation).getByText('Briefings')).toHaveAttribute('aria-disabled', 'true');
+    expect(within(navigation).getByRole('link', { name: 'Reach & acquisition' })).toHaveAttribute(
+      'href',
+      '/projects/hermes-relay/reach-acquisition',
+    );
+    expect(within(navigation).getByRole('link', { name: 'Delivery & sources' })).toHaveAttribute(
+      'href',
+      '/projects/hermes-relay/delivery-sources',
+    );
   });
 
   it('opens and closes a labelled mobile navigation sheet', async () => {
@@ -50,7 +66,7 @@ describe('Observatory shell', () => {
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Close navigation' })).toHaveFocus();
     await user.tab({ shift: true });
-    expect(within(dialog).getByRole('link', { name: 'Overview' })).toHaveFocus();
+    expect(within(dialog).getByRole('link', { name: 'Delivery & sources' })).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveFocus();

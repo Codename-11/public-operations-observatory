@@ -26,3 +26,12 @@
 - Fixed the PostgreSQL CI lane failing before migration because GitHub Actions injects `GITHUB_REPOSITORY` as `owner/repository`, while the collector expected that name to contain a bare repository slug.
 - Namespaced collector target configuration as `OBSERVATORY_GITHUB_OWNER` and `OBSERVATORY_GITHUB_REPOSITORY` so platform metadata cannot override application configuration.
 - Added regression coverage for the GitHub Actions environment collision and reverified the workspace, PostgreSQL, least-privilege read-role, and browser lanes.
+
+## 2026-08-13 — Production data-surface buildout
+
+- Replaced the single Overview composition with three supported, route-aware operating views: Executive Pulse, Reach & Acquisition, and Delivery & Sources.
+- Kept every displayed fact inside `OverviewReadModelV1`: fixed 7-day windows only, independent GitHub aggregate signals without conversion or attribution language, and an explicit distinction between the supplied release record and totals observed across trend intervals.
+- Added registry-derived Magic UI primitives to the shared UI package using `motion/react`: animated grid, blur fade, border beam, number ticker, particles, and shimmer button, with server-safe initialization and reduced-motion behavior.
+- Preserved server-only API access, bounded evidence links, generic failure details, page-level context on failure, partial and unavailable states, exact accessible tables, and existing disabled navigation for unsupported areas.
+- Added responsive navigation and layouts for all three routes, internal scrolling plus an explicit mobile hint for the exact Reach table, and verified no document overflow at 390 px or 320 px.
+- Expanded unit, axe, and Playwright coverage across selectors, surfaces, route state, API failure context, complete and partial fixtures, evidence dialogs, console errors, analytics absence, reduced motion, and desktop/mobile behavior.

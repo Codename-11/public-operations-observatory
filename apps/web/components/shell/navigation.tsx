@@ -1,9 +1,8 @@
 import {
+  Activity,
   BarChart3,
   BookOpenText,
-  CircleDot,
   GitPullRequestArrow,
-  RadioTower,
   Settings,
   Siren,
   Truck,
@@ -11,39 +10,52 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-type Item = { label: string; icon: LucideIcon; supported: boolean };
+type Item = {
+  label: string;
+  icon: LucideIcon;
+  href?: (projectKey: string) => string;
+};
 const sections: { label: string; items: Item[] }[] = [
   {
     label: 'Review',
     items: [
-      { label: 'Overview', icon: CircleDot, supported: true },
-      { label: 'Attention', icon: Siren, supported: false },
+      { label: 'Executive pulse', icon: Activity, href: (key) => `/projects/${key}` },
+      { label: 'Attention', icon: Siren },
     ],
   },
   {
     label: 'Signals',
     items: [
-      { label: 'Reach & acquisition', icon: BarChart3, supported: false },
-      { label: 'Support', icon: Wrench, supported: false },
-      { label: 'Contributions', icon: GitPullRequestArrow, supported: false },
-      { label: 'Delivery', icon: Truck, supported: false },
+      {
+        label: 'Reach & acquisition',
+        icon: BarChart3,
+        href: (key) => `/projects/${key}/reach-acquisition`,
+      },
+      { label: 'Support', icon: Wrench },
+      { label: 'Contributions', icon: GitPullRequestArrow },
+      {
+        label: 'Delivery & sources',
+        icon: Truck,
+        href: (key) => `/projects/${key}/delivery-sources`,
+      },
     ],
   },
   {
     label: 'Operations',
     items: [
-      { label: 'Briefings', icon: BookOpenText, supported: false },
-      { label: 'Sources', icon: RadioTower, supported: false },
-      { label: 'Settings', icon: Settings, supported: false },
+      { label: 'Briefings', icon: BookOpenText },
+      { label: 'Settings', icon: Settings },
     ],
   },
 ];
 export function PrimaryNavigation({
   projectKey,
+  currentPath,
   onNavigate,
   ariaLabel = 'Primary',
 }: {
   projectKey: string;
+  currentPath: string;
   onNavigate?: () => void;
   ariaLabel?: string;
 }) {
@@ -53,10 +65,14 @@ export function PrimaryNavigation({
         <div className="nav-section" key={section.label}>
           <h2>{section.label}</h2>
           <ul>
-            {section.items.map(({ label, icon: Icon, supported }) => (
+            {section.items.map(({ label, icon: Icon, href }) => (
               <li key={label}>
-                {supported ? (
-                  <a href={`/projects/${projectKey}`} aria-current="page" onClick={onNavigate}>
+                {href ? (
+                  <a
+                    href={href(projectKey)}
+                    aria-current={currentPath === href(projectKey) ? 'page' : undefined}
+                    onClick={onNavigate}
+                  >
                     <Icon aria-hidden="true" />
                     {label}
                   </a>

@@ -1,6 +1,7 @@
 'use client';
 
 import { MobileMenuButton, Sheet, TooltipProvider } from '@public-operations-observatory/ui';
+import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { PrimaryNavigation } from './navigation';
@@ -13,6 +14,7 @@ export function ObservatoryShell({
   children: ReactNode;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const currentPath = usePathname();
   return (
     <TooltipProvider delayDuration={250}>
       <a className="skip-link" href="#main-content">
@@ -21,7 +23,7 @@ export function ObservatoryShell({
       <div className="observatory-shell">
         <aside className="desktop-sidebar" aria-label="Observatory">
           <ProductName />
-          <PrimaryNavigation projectKey={projectKey} />
+          <PrimaryNavigation projectKey={projectKey} currentPath={currentPath} />
         </aside>
         <div className="shell-body">
           <header className="topbar">
@@ -35,6 +37,7 @@ export function ObservatoryShell({
               >
                 <PrimaryNavigation
                   projectKey={projectKey}
+                  currentPath={currentPath}
                   onNavigate={() => setNavigationOpen(false)}
                 />
               </Sheet>
@@ -63,7 +66,11 @@ export function ObservatoryShell({
                 <strong>Hermes-Relay</strong>
               </span>
             </div>
-            <PrimaryNavigation projectKey={projectKey} ariaLabel="Tablet primary" />
+            <PrimaryNavigation
+              projectKey={projectKey}
+              currentPath={currentPath}
+              ariaLabel="Tablet primary"
+            />
           </div>
           <main id="main-content" tabIndex={-1}>
             {children}
