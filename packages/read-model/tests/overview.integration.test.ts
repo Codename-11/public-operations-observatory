@@ -31,8 +31,18 @@ integration('PostgreSQL Overview read model', () => {
 
   afterAll(async () => {
     await cleanup(database);
-    await database.end();
-    await admin.query(`DROP DATABASE ${databaseName} WITH (FORCE)`);
+    database.on('error', () => undefined);
+    await database.end().catch(() => undefined);
+    await admin
+      .query(
+        `SELECT pg_terminate_backend(pid)
+           FROM pg_stat_activity
+          WHERE datname = $1
+            AND pid <> pg_backend_pid()`,
+        [databaseName],
+      )
+      .catch(() => undefined);
+    await admin.query(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`);
     await admin.end();
   });
 
