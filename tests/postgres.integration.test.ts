@@ -413,10 +413,11 @@ integration('PostgreSQL operating loop', () => {
       const demotion = demoter.query("UPDATE collection_runs SET status = 'failed' WHERE id = $1", [
         run.id,
       ]);
-      await checkpointer.query('COMMIT');
-      await expect(demotion).rejects.toThrow(
+      const demotionRejected = expect(demotion).rejects.toThrow(
         'a collection run referenced by a checkpoint must remain succeeded',
       );
+      await checkpointer.query('COMMIT');
+      await demotionRejected;
       await demoter.query('ROLLBACK');
       const invariant = await database.query<{ refs: string; status: string }>(
         `SELECT run.status,
