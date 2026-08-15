@@ -78,17 +78,19 @@ export const buildServer = (options: BuildServerOptions): FastifyInstance => {
   }
   const triggerRefresh =
     options.triggerRefresh ??
-    (options.config.refreshCommand === undefined
-      ? undefined
-      : async () => {
-          const command = options.config.refreshCommand;
-          if (command === undefined) return;
-          await execFileAsync(command.executable, command.arguments, {
-            timeout: options.config.refreshTimeoutMs,
-            maxBuffer: 64 * 1_024,
-            windowsHide: true,
-          });
-        });
+    (options.config.refreshEnabled
+      ? async () => {
+          await execFileAsync(
+            '/usr/bin/systemctl',
+            ['--user', 'start', 'public-operations-observatory-collect.service'],
+            {
+              timeout: options.config.refreshTimeoutMs,
+              maxBuffer: 64 * 1_024,
+              windowsHide: true,
+            },
+          );
+        }
+      : undefined);
 
   app.addHook('onRequest', async (request, reply) => {
     for (const [name, value] of Object.entries(securityHeaders)) reply.header(name, value);

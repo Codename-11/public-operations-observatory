@@ -12,8 +12,14 @@ import {
   StatusBadge,
 } from '@public-operations-observatory/ui';
 
-const navigationState = vi.hoisted(() => ({ pathname: '/projects/hermes-relay' }));
-vi.mock('next/navigation', () => ({ usePathname: () => navigationState.pathname }));
+const navigationState = vi.hoisted(() => ({
+  pathname: '/projects/hermes-relay',
+  view: null as string | null,
+}));
+vi.mock('next/navigation', () => ({
+  usePathname: () => navigationState.pathname,
+  useSearchParams: () => ({ get: (key: string) => (key === 'view' ? navigationState.view : null) }),
+}));
 
 const shell = (children = <h1>Hermes-Relay public operations</h1>) =>
   render(<ObservatoryShell projectKey="hermes-relay">{children}</ObservatoryShell>);
@@ -30,6 +36,7 @@ describe('Observatory shell', () => {
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content');
     expect(screen.getAllByText('Hermes-Relay')).not.toHaveLength(0);
+    expect(screen.getByText('Current UTC observation window')).toBeInTheDocument();
     expect(
       within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', {
         name: 'Executive pulse',
@@ -40,6 +47,16 @@ describe('Observatory shell', () => {
         name: 'Reach & acquisition',
       }),
     ).not.toHaveAttribute('aria-current');
+  });
+
+  it('labels the completed-week shell context only when that view is selected', () => {
+    navigationState.view = 'completed';
+    try {
+      shell();
+      expect(screen.getByText('Latest completed UTC week')).toBeInTheDocument();
+    } finally {
+      navigationState.view = null;
+    }
   });
 
   it('renders unsupported destinations as disabled text, never dead links', () => {

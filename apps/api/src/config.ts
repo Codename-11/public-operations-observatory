@@ -27,7 +27,7 @@ export interface ApiConfig {
   concurrencyLimit: number;
   rateLimitMax: number;
   rateLimitWindowMs: number;
-  refreshCommand?: { executable: string; arguments: string[] };
+  refreshEnabled: boolean;
   refreshTimeoutMs: number;
 }
 
@@ -79,37 +79,6 @@ export const loadConfig = (environment: NodeJS.ProcessEnv = process.env): ApiCon
   if (!authBypass && authToken === undefined) {
     throw new Error('API_AUTH_TOKEN is required unless non-production bypass is explicit');
   }
-  const refreshExecutable = environment.API_REFRESH_EXECUTABLE;
-  const refreshArgumentsJson = environment.API_REFRESH_ARGUMENTS_JSON;
-  if ((refreshExecutable === undefined) !== (refreshArgumentsJson === undefined)) {
-    throw new Error(
-      'API_REFRESH_EXECUTABLE and API_REFRESH_ARGUMENTS_JSON must be configured together',
-    );
-  }
-  let refreshCommand: ApiConfig['refreshCommand'];
-  if (refreshExecutable !== undefined && refreshArgumentsJson !== undefined) {
-    if (!refreshExecutable.startsWith('/') || refreshExecutable.includes('\0')) {
-      throw new Error('API_REFRESH_EXECUTABLE must be an absolute executable path');
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(refreshArgumentsJson);
-    } catch {
-      throw new Error('API_REFRESH_ARGUMENTS_JSON must be a JSON string array');
-    }
-    if (
-      !Array.isArray(parsed) ||
-      parsed.length > 16 ||
-      parsed.some(
-        (argument) =>
-          typeof argument !== 'string' || argument.length > 256 || argument.includes('\0'),
-      )
-    ) {
-      throw new Error('API_REFRESH_ARGUMENTS_JSON must be a bounded JSON string array');
-    }
-    refreshCommand = { executable: refreshExecutable, arguments: parsed as string[] };
-  }
-
   return {
     nodeEnv,
     host: environment.API_HOST ?? DEFAULTS.host,
@@ -161,7 +130,7 @@ export const loadConfig = (environment: NodeJS.ProcessEnv = process.env): ApiCon
       1_000,
       3_600_000,
     ),
-    ...(refreshCommand === undefined ? {} : { refreshCommand }),
+    refreshEnabled: boolean(environment, 'API_REFRESH_ENABLED'),
     refreshTimeoutMs: integer(
       environment,
       'API_REFRESH_TIMEOUT_MS',

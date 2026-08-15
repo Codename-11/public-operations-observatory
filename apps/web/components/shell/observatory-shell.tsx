@@ -1,7 +1,7 @@
 'use client';
 
 import { MobileMenuButton, Sheet, TooltipProvider } from '@public-operations-observatory/ui';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { PrimaryNavigation } from './navigation';
@@ -15,6 +15,7 @@ export function ObservatoryShell({
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   const currentPath = usePathname();
+  const completedView = useSearchParams()?.get('view') === 'completed';
   return (
     <TooltipProvider delayDuration={250}>
       <a className="skip-link" href="#main-content">
@@ -52,8 +53,10 @@ export function ObservatoryShell({
               </div>
             </div>
             <div className="review-context">
-              <span className="context-label">Review window</span>
-              <span>Latest completed UTC week</span>
+              <span className="context-label">Observation view</span>
+              <span>
+                {completedView ? 'Latest completed UTC week' : 'Current UTC observation window'}
+              </span>
             </div>
           </header>
           <div className="tablet-navigation">

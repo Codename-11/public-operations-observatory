@@ -71,6 +71,7 @@ const authConfig: ApiConfig = {
   concurrencyLimit: 8,
   rateLimitMax: 60,
   rateLimitWindowMs: 60_000,
+  refreshEnabled: false,
   refreshTimeoutMs: 60_000,
 };
 
@@ -130,37 +131,23 @@ describe('configuration', () => {
     ).toThrow('API_DB_POOL_MAX');
   });
 
-  it('accepts only a paired fixed refresh executable and JSON argument array', () => {
+  it('requires an explicit boolean to enable the fixed refresh trigger', () => {
     expect(() =>
       loadConfig({
         NODE_ENV: 'test',
         DATABASE_URL: authConfig.databaseUrl,
         API_AUTH_TOKEN: authConfig.authToken,
-        API_REFRESH_EXECUTABLE: '/usr/bin/systemctl',
+        API_REFRESH_ENABLED: 'yes',
       }),
-    ).toThrow('configured together');
-    expect(() =>
-      loadConfig({
-        NODE_ENV: 'test',
-        DATABASE_URL: authConfig.databaseUrl,
-        API_AUTH_TOKEN: authConfig.authToken,
-        API_REFRESH_EXECUTABLE: 'systemctl',
-        API_REFRESH_ARGUMENTS_JSON: '[]',
-      }),
-    ).toThrow('absolute executable path');
+    ).toThrow('API_REFRESH_ENABLED must be true or false');
     expect(
       loadConfig({
         NODE_ENV: 'test',
         DATABASE_URL: authConfig.databaseUrl,
         API_AUTH_TOKEN: authConfig.authToken,
-        API_REFRESH_EXECUTABLE: '/usr/bin/systemctl',
-        API_REFRESH_ARGUMENTS_JSON:
-          '["--user","start","public-operations-observatory-collect.service"]',
-      }).refreshCommand,
-    ).toEqual({
-      executable: '/usr/bin/systemctl',
-      arguments: ['--user', 'start', 'public-operations-observatory-collect.service'],
-    });
+        API_REFRESH_ENABLED: 'true',
+      }).refreshEnabled,
+    ).toBe(true);
   });
 });
 
@@ -200,6 +187,7 @@ describe('read-only Overview API', () => {
       concurrencyLimit: authConfig.concurrencyLimit,
       rateLimitMax: authConfig.rateLimitMax,
       rateLimitWindowMs: authConfig.rateLimitWindowMs,
+      refreshEnabled: authConfig.refreshEnabled,
       refreshTimeoutMs: authConfig.refreshTimeoutMs,
     };
     const app = buildServer({
