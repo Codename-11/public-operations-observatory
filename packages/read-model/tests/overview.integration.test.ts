@@ -2,6 +2,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { migrate } from '../../../src/db/migrate.js';
+import { readHistoricalContext } from '../src/history.js';
 import { readOverview } from '../src/overview.js';
 import { getProject } from '../src/project-registry.js';
 
@@ -144,6 +145,122 @@ integration('PostgreSQL Overview read model', () => {
         requiredDays: 7,
       },
     });
+  });
+
+  it('withholds exact star deltas when the prior value is a lower-bound reconstruction', async () => {
+    await seedComplete(database);
+    await database.query(
+      `DELETE FROM normalized_records
+        WHERE (record_kind = 'repository.summary' AND effective_at >= '2026-08-09' AND effective_at < '2026-08-12')
+           OR (record_kind = 'issues.summary' AND effective_at < '2026-08-12')`,
+    );
+    await record(database, {
+      id: id(901),
+      kind: 'repository.summary',
+      externalId: 'repository-history',
+      effectiveAt: '2026-08-11T00:00:00Z',
+      payload: {
+        stars: 109,
+        derivation: { method: 'current-stargazer-cohort', lowerBound: true },
+      },
+    });
+    await record(database, {
+      id: id(902),
+      kind: 'issues.summary',
+      externalId: 'issues-history',
+      effectiveAt: '2026-08-11T00:00:00Z',
+      payload: {
+        open: 14,
+        derivation: { method: 'issue-state-events', reconstructed: true },
+      },
+    });
+
+    const overview = await readOverview(database, {
+      projectKey: 'hermes-relay',
+      period: '7d',
+      view: 'current',
+      asOf,
+    });
+    expect(change(overview, 'github.stars')).toMatchObject({
+      current: 125,
+      previous: 109,
+      delta: null,
+    });
+    expect(change(overview, 'github.open_issues')).toMatchObject({
+      current: 7,
+      previous: 14,
+      delta: -7,
+    });
+    expect(overview.provenance.references.map(({ ref }) => ref)).toEqual(
+      expect.arrayContaining([`record:${id(901)}`, `record:${id(902)}`]),
+    );
+  });
+
+  it('returns independent month-end reconstructed history and observed traffic days', async () => {
+    await seedComplete(database);
+    await record(database, {
+      id: id(903),
+      kind: 'repository.summary',
+      externalId: 'repository-history',
+      effectiveAt: '2026-04-09T00:00:00Z',
+      payload: { stars: 1, derivation: { method: 'current-stargazer-cohort', lowerBound: true } },
+    });
+    await record(database, {
+      id: id(904),
+      kind: 'repository.summary',
+      externalId: 'repository-history',
+      effectiveAt: '2026-04-30T00:00:00Z',
+      payload: { stars: 12, derivation: { method: 'current-stargazer-cohort', lowerBound: true } },
+    });
+    await record(database, {
+      id: id(905),
+      kind: 'issues.summary',
+      externalId: 'issues-history',
+      effectiveAt: '2026-04-30T00:00:00Z',
+      payload: { open: 4, derivation: { method: 'issue-state-events', reconstructed: true } },
+    });
+
+    const history = await readHistoricalContext(database, {
+      projectKey: 'hermes-relay',
+      period: '180d',
+      asOf,
+    });
+    const stars = history.series.find(({ metricKey }) => metricKey === 'github.stars');
+    const issues = history.series.find(({ metricKey }) => metricKey === 'github.open_issues');
+    const views = history.series.find(({ metricKey }) => metricKey === 'github.views');
+    expect(stars).toMatchObject({ method: 'lower-bound', bucket: 'calendar-month-end' });
+    expect(stars?.points).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ timestamp: '2026-04-30T00:00:00.000Z', value: 12 }),
+      ]),
+    );
+    expect(stars?.points.some(({ timestamp }) => timestamp === '2026-04-09T00:00:00.000Z')).toBe(
+      false,
+    );
+    expect(issues?.points).toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: 4, availability: 'partial' })]),
+    );
+    expect(views).toMatchObject({ method: 'observed', bucket: 'utc-day', availability: 'partial' });
+    expect(history.provenance.references.map(({ ref }) => ref)).toContain(`record:${id(904)}`);
+  });
+
+  it('does not treat history backfills as source-refresh freshness', async () => {
+    await seedComplete(database);
+    const backfillRun = '20000000-0000-4000-8000-000000000099';
+    await seedRun(database, backfillRun, 'succeeded', '2026-08-18T11:00:00Z');
+    await database.query(
+      `UPDATE collection_runs SET operation = 'history_backfill' WHERE id = $1`,
+      [backfillRun],
+    );
+
+    const overview = await readOverview(database, {
+      projectKey: 'hermes-relay',
+      period: '7d',
+      view: 'current',
+      asOf,
+    });
+    expect(overview.freshness.lastSuccessfulAt).toBe('2026-08-18T01:00:00.000Z');
+    expect(overview.sources[0]?.lastAttemptAt).toBe('2026-08-18T01:00:00.000Z');
   });
 
   it('does not treat an older release first observed in the current window as interval downloads', async () => {

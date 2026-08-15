@@ -6,7 +6,7 @@ let mode = 'complete';
 let overviewRequests = [];
 let refreshRequests = 0;
 
-const base = {
+const baseWithHistory = {
   version: 1,
   project: {
     key: 'hermes-relay',
@@ -33,7 +33,7 @@ const base = {
   changes: [
     {
       metricKey: 'github.stars',
-      label: 'Net stars',
+      label: 'Stars',
       unit: 'count',
       availability: 'complete',
       current: 120,
@@ -87,6 +87,128 @@ const base = {
       provenanceRefs: [],
     },
   ],
+  history: {
+    version: 1,
+    project: {
+      key: 'hermes-relay',
+      name: 'Hermes-Relay',
+      repository: 'Codename-11/hermes-relay',
+      scope: 'Codename-11/hermes-relay',
+    },
+    period: '180d',
+    window: {
+      start: '2026-04-01T00:00:00.000Z',
+      end: '2026-08-10T00:05:00.000Z',
+    },
+    asOf: '2026-08-10T00:05:00.000Z',
+    series: [
+      {
+        metricKey: 'github.stars',
+        label: 'Active-star cohort',
+        unit: 'count',
+        bucket: 'calendar-month-end',
+        method: 'lower-bound',
+        availability: 'partial',
+        limitation: 'People who later unstarred are absent.',
+        reasonCode: 'reconstructed-lower-bound',
+        evidenceUrl: 'https://github.com/Codename-11/hermes-relay/stargazers',
+        points: [
+          {
+            timestamp: '2026-04-09T00:00:00.000Z',
+            value: 1,
+            availability: 'partial',
+            provenanceRefs: [],
+          },
+          {
+            timestamp: '2026-08-10T00:00:00.000Z',
+            value: 120,
+            availability: 'partial',
+            provenanceRefs: [],
+          },
+        ],
+      },
+      {
+        metricKey: 'github.open_issues',
+        label: 'Open issues',
+        unit: 'count',
+        bucket: 'calendar-month-end',
+        method: 'reconstructed',
+        availability: 'partial',
+        limitation: 'Reconstructed from issue lifecycle events.',
+        reasonCode: 'reconstructed',
+        evidenceUrl: 'https://github.com/Codename-11/hermes-relay/issues',
+        points: [
+          {
+            timestamp: '2026-04-09T00:00:00.000Z',
+            value: 0,
+            availability: 'partial',
+            provenanceRefs: [],
+          },
+          {
+            timestamp: '2026-08-10T00:00:00.000Z',
+            value: 8,
+            availability: 'partial',
+            provenanceRefs: [],
+          },
+        ],
+      },
+      {
+        metricKey: 'github.views',
+        label: 'Page views',
+        unit: 'views',
+        bucket: 'utc-day',
+        method: 'observed',
+        availability: 'partial',
+        limitation: 'Earlier traffic history is unavailable.',
+        reasonCode: 'source-rolling-window',
+        evidenceUrl: 'https://github.com/Codename-11/hermes-relay/graphs/traffic',
+        points: [
+          {
+            timestamp: '2026-08-09T00:00:00.000Z',
+            value: 9,
+            availability: 'complete',
+            provenanceRefs: [],
+          },
+          {
+            timestamp: '2026-08-10T00:00:00.000Z',
+            value: 12,
+            availability: 'complete',
+            provenanceRefs: [],
+          },
+        ],
+      },
+      {
+        metricKey: 'github.clones',
+        label: 'Repository clones',
+        unit: 'clones',
+        bucket: 'utc-day',
+        method: 'observed',
+        availability: 'partial',
+        limitation: 'Earlier traffic history is unavailable.',
+        reasonCode: 'source-rolling-window',
+        evidenceUrl: 'https://github.com/Codename-11/hermes-relay/graphs/traffic',
+        points: [
+          {
+            timestamp: '2026-08-09T00:00:00.000Z',
+            value: 3,
+            availability: 'complete',
+            provenanceRefs: [],
+          },
+          {
+            timestamp: '2026-08-10T00:00:00.000Z',
+            value: 5,
+            availability: 'complete',
+            provenanceRefs: [],
+          },
+        ],
+      },
+    ],
+    provenance: {
+      scope: 'Codename-11/hermes-relay',
+      generatedAt: '2026-08-10T00:05:00.000Z',
+      references: [],
+    },
+  },
   trend: {
     metricKey: 'github.release_asset_downloads',
     label: 'Release asset downloads',
@@ -154,6 +276,8 @@ const base = {
   },
 };
 
+const { history, ...base } = baseWithHistory;
+
 const fixture = () => {
   const value = structuredClone(base);
   if (mode === 'partial') {
@@ -196,6 +320,11 @@ const server = http.createServer((request, response) => {
   }
   if (request.method === 'GET' && url.pathname === '/__fixture/requests') {
     return json(response, 200, { overviewRequests, refreshRequests });
+  }
+  if (request.method === 'GET' && url.pathname === '/api/v1/projects/hermes-relay/history') {
+    if (request.headers.authorization !== `Bearer ${expectedToken}`)
+      return json(response, 401, { title: 'Unauthorized' });
+    return json(response, 200, history);
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/projects/hermes-relay/overview') {
     const authorization = request.headers.authorization ?? null;

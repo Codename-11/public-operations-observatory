@@ -1,7 +1,17 @@
 'use client';
 
-import type { OverviewReadModelV1 } from '@public-operations-observatory/contracts';
-import { BlurFade, Card, CardContent, CardHeader } from '@public-operations-observatory/ui';
+import type {
+  HistoricalContextReadModelV1,
+  HistoricalContextSeriesV1,
+  OverviewReadModelV1,
+} from '@public-operations-observatory/contracts';
+import {
+  BlurFade,
+  Card,
+  CardContent,
+  CardHeader,
+  EvidenceLink,
+} from '@public-operations-observatory/ui';
 
 import { selectReachAcquisition, type MetricChangeSelection } from '../../lib/data-surfaces';
 import {
@@ -85,7 +95,85 @@ function ComparisonVisual({ metrics }: { metrics: MetricChangeSelection[] }) {
   );
 }
 
-export function ReachAcquisitionSurface({ overview }: { overview: OverviewReadModelV1 }) {
+function HistoricalSeriesCard({ series }: { series: HistoricalContextSeriesV1 }) {
+  const points = series.points.filter(
+    (point): point is typeof point & { value: number } => point.value !== null,
+  );
+  const values = points.map(({ value }) => value);
+  const minimum = Math.min(...values, 0);
+  const maximum = Math.max(...values, 1);
+  const range = Math.max(maximum - minimum, 1);
+  const coordinates = points
+    .map(({ value }, index) => {
+      const x = points.length <= 1 ? 0 : (index / (points.length - 1)) * 100;
+      const y = 100 - ((value - minimum) / range) * 100;
+      return `${x},${y}`;
+    })
+    .join(' ');
+  const first = points[0];
+  const latest = points.at(-1);
+  const method =
+    series.method === 'lower-bound'
+      ? 'Lower-bound reconstruction'
+      : series.method === 'reconstructed'
+        ? 'Reconstructed'
+        : 'Directly observed';
+
+  return (
+    <Card className="history-series-card">
+      <CardHeader>
+        <div>
+          <h3>{series.label}</h3>
+          <p>{method}</p>
+        </div>
+        <span className={`history-method history-method--${series.method}`}>{series.method}</span>
+      </CardHeader>
+      <CardContent>
+        {points.length === 0 ? (
+          <p>No recoverable historical points.</p>
+        ) : (
+          <>
+            <svg
+              className="history-sparkline"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              role="img"
+              aria-label={`${series.label} history from ${first?.timestamp ?? 'unknown'} to ${latest?.timestamp ?? 'unknown'}; ${first?.value ?? 0} to ${latest?.value ?? 0} ${series.unit}.`}
+            >
+              <polyline points={coordinates} vectorEffect="non-scaling-stroke" />
+            </svg>
+            <dl className="history-series-summary">
+              <div>
+                <dt>First recoverable</dt>
+                <dd>{first?.value ?? 'Unavailable'}</dd>
+              </div>
+              <div>
+                <dt>Latest</dt>
+                <dd>{latest?.value ?? 'Unavailable'}</dd>
+              </div>
+              <div>
+                <dt>Points</dt>
+                <dd>{points.length}</dd>
+              </div>
+            </dl>
+          </>
+        )}
+        {series.limitation ? <p className="history-limitation">{series.limitation}</p> : null}
+        {series.evidenceUrl ? (
+          <EvidenceLink href={series.evidenceUrl}>Inspect source</EvidenceLink>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ReachAcquisitionSurface({
+  overview,
+  history = null,
+}: {
+  overview: OverviewReadModelV1;
+  history?: HistoricalContextReadModelV1 | null;
+}) {
   const reach = selectReachAcquisition(overview);
   const view = overview.view ?? 'completed';
   const metrics = [reach.views, reach.clones, reach.stars].filter(
@@ -138,6 +226,28 @@ export function ReachAcquisitionSurface({ overview }: { overview: OverviewReadMo
           <ComparisonVisual metrics={metrics} />
         </BlurFade>
       )}
+
+      {history === null ? (
+        <SurfaceSection
+          id="reach-history-title"
+          title="Best-effort historical signals"
+          description="Historical context is unavailable. Current and completed seven-day signals remain valid."
+        >
+          <p className="data-surface-empty">No historical series are available right now.</p>
+        </SurfaceSection>
+      ) : history ? (
+        <SurfaceSection
+          id="reach-history-title"
+          title="Best-effort historical signals"
+          description="Primary-source history where recoverable. Reconstruction methods and unavailable source windows stay explicit."
+        >
+          <div className="history-series-grid">
+            {history.series.map((series) => (
+              <HistoricalSeriesCard key={series.metricKey} series={series} />
+            ))}
+          </div>
+        </SurfaceSection>
+      ) : null}
     </div>
   );
 }

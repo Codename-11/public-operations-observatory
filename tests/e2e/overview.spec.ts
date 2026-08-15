@@ -56,10 +56,10 @@ test('Executive Pulse is the default route with exact facts, safe evidence, and 
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const observed = observeBrowser(page);
-  await page.goto(routes.pulse, { waitUntil: 'networkidle' });
+  await page.goto(routes.pulse, { waitUntil: 'domcontentloaded' });
 
   await expect(page.getByRole('heading', { name: 'Hermes-Relay decision layer' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Stars', exact: true })).toBeVisible();
+  await expect(page.locator('#executive-stars-title')).toHaveText('Stars');
   await expect(page.getByLabel('120')).toHaveCount(2);
   await expect(page.getByRole('heading', { name: 'Open issues' })).toBeVisible();
   await expect(page.locator('.data-surface-window')).toContainText('Current observation window');
@@ -117,7 +117,7 @@ test('Executive Pulse is the default route with exact facts, safe evidence, and 
 test('Completed week remains available and Refresh now runs through the server boundary', async ({
   page,
 }) => {
-  await page.goto(routes.pulse, { waitUntil: 'networkidle' });
+  await page.goto(routes.pulse, { waitUntil: 'domcontentloaded' });
 
   await page.getByRole('link', { name: 'Completed week' }).click();
   await expect(page).toHaveURL(/view=completed/);
@@ -142,7 +142,7 @@ test('Reach and acquisition presents independent exact signals without attributi
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const observed = observeBrowser(page);
-  await page.goto(routes.reach, { waitUntil: 'networkidle' });
+  await page.goto(routes.reach, { waitUntil: 'domcontentloaded' });
 
   await expect(
     page.getByRole('heading', { name: 'Hermes-Relay repository signals' }),
@@ -154,9 +154,14 @@ test('Reach and acquisition presents independent exact signals without attributi
     table.getByRole('row', { name: 'Page views views 60 50 +10 complete' }),
   ).toBeVisible();
   await expect(table.getByRole('row', { name: 'Clones clones 22 20 +2 complete' })).toBeVisible();
+  await expect(table.getByRole('row', { name: 'Stars count 120 115 +5 complete' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Best-effort historical signals' })).toBeVisible();
+  await expect(page.locator('.history-series-card')).toHaveCount(4);
   await expect(
-    table.getByRole('row', { name: 'Net stars count 120 115 +5 complete' }),
+    page.getByRole('img', { name: /Active-star cohort history.*1 to 120 count/i }),
   ).toBeVisible();
+  await expect(page.getByText('People who later unstarred are absent.')).toBeVisible();
+  await expect(page.getByText('Earlier traffic history is unavailable.')).toHaveCount(2);
   await expect(page.getByRole('main')).not.toContainText(/conversion|attribution|unique visitors/i);
   await expect(page.getByText('Scroll horizontally for all exact columns.')).toBeHidden();
   await expect(
@@ -173,7 +178,7 @@ test('Delivery and sources exposes exact intervals, release context, and source 
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const observed = observeBrowser(page);
-  await page.goto(routes.delivery, { waitUntil: 'networkidle' });
+  await page.goto(routes.delivery, { waitUntil: 'domcontentloaded' });
 
   await expect(page.getByRole('heading', { name: 'Hermes-Relay release delivery' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'v1.2.3' })).toBeVisible();
@@ -203,7 +208,7 @@ test('tablet navigation exposes all supported routes and tracks the active surfa
   ] as const;
 
   for (const [route, activeLabel] of destinations) {
-    await page.goto(route, { waitUntil: 'networkidle' });
+    await page.goto(route, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.desktop-sidebar')).toBeHidden();
     await expect(page.locator('.tablet-navigation')).toBeVisible();
     const navigation = page.getByRole('navigation', { name: 'Tablet primary' });
@@ -224,7 +229,7 @@ for (const width of [390, 320]) {
     const observed = observeBrowser(page);
 
     for (const route of Object.values(routes)) {
-      await page.goto(route, { waitUntil: 'networkidle' });
+      await page.goto(route, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.desktop-sidebar')).toBeHidden();
       await expect(page.locator('.tablet-navigation')).toBeHidden();
       await expectNoOverflow(page);
@@ -233,7 +238,7 @@ for (const width of [390, 320]) {
       }
     }
 
-    await page.goto(routes.pulse, { waitUntil: 'networkidle' });
+    await page.goto(routes.pulse, { waitUntil: 'domcontentloaded' });
     await page.keyboard.press('Tab');
     const skip = page.getByRole('link', { name: 'Skip to main content' });
     await expect(skip).toBeFocused();
@@ -260,19 +265,19 @@ test('partial fixture keeps retained Reach facts and marks the unavailable curre
 }) => {
   await resetFixture('partial');
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(routes.reach, { waitUntil: 'networkidle' });
+  await page.goto(routes.reach, { waitUntil: 'domcontentloaded' });
 
   await expect(page.getByText('Partial overview')).toBeVisible();
   const views = page.getByLabel('Page views metric');
   await expect(views.getByText('Unavailable')).toHaveCount(2);
   await expect(views.getByText('50')).toBeVisible();
-  await expect(page.getByLabel('Net stars metric').getByLabel('120')).toBeVisible();
+  await expect(page.getByLabel('Stars metric').getByLabel('120')).toBeVisible();
 });
 
 test('reduced motion disables repeated motion while preserving exact values', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(routes.delivery, { waitUntil: 'networkidle' });
+  await page.goto(routes.delivery, { waitUntil: 'domcontentloaded' });
 
   await expect(page.getByRole('button', { name: 'Review evidence' })).toHaveCSS(
     'transition-duration',

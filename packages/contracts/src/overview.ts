@@ -442,6 +442,7 @@ export const OverviewReadModelV1Schema = z
     warnings: z.array(OverviewWarningV1Schema).max(100),
     changes: z.array(OverviewChangeV1Schema).max(20),
     trend: OverviewTrendV1Schema,
+
     release: OverviewReleaseV1Schema.nullable(),
     briefing: OverviewBriefingSummaryV1Schema,
     sources: z.array(OverviewSourceV1Schema).max(20),
@@ -482,6 +483,7 @@ export const OverviewReadModelV1Schema = z
     overview.trend.annotations.forEach((annotation, index) =>
       validateRefs(annotation.provenanceRefs, ['trend', 'annotations', index, 'provenanceRefs']),
     );
+
     if (overview.release !== null) {
       validateRefs(overview.release.provenanceRefs, ['release', 'provenanceRefs']);
     }
@@ -527,6 +529,7 @@ export type OverviewChangeV1 = z.infer<typeof OverviewChangeV1Schema>;
 export type OverviewTrendPointV1 = z.infer<typeof OverviewTrendPointV1Schema>;
 export type OverviewTrendAnnotationV1 = z.infer<typeof OverviewTrendAnnotationV1Schema>;
 export type OverviewTrendV1 = z.infer<typeof OverviewTrendV1Schema>;
+
 export type OverviewReleaseV1 = z.infer<typeof OverviewReleaseV1Schema>;
 export type OverviewBriefingSummaryV1 = z.infer<typeof OverviewBriefingSummaryV1Schema>;
 export type OverviewSourceV1 = z.infer<typeof OverviewSourceV1Schema>;

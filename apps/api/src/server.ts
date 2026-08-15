@@ -2,20 +2,26 @@ import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-import { readOverview as readOverviewFromDatabase } from '@public-operations-observatory/read-model';
+import {
+  readHistoricalContext as readHistoryFromDatabase,
+  readOverview as readOverviewFromDatabase,
+} from '@public-operations-observatory/read-model';
 import Fastify, { type FastifyInstance } from 'fastify';
 import pg from 'pg';
 
 import { loadConfig, type ApiConfig } from './config.js';
 import { sendProblem } from './problem-details.js';
+import { registerProjectsHistory, type HistoryReader } from './routes/projects-history.js';
 import { registerProjectsRefresh, type RefreshTrigger } from './routes/projects-refresh.js';
 import { registerProjectsOverview, type OverviewReader } from './routes/projects-overview.js';
 
 export type { OverviewReader } from './routes/projects-overview.js';
+export type { HistoryReader } from './routes/projects-history.js';
 export type { RefreshTrigger } from './routes/projects-refresh.js';
 
 interface BuildServerOptions {
   config: ApiConfig;
+  readHistory?: HistoryReader;
   readOverview?: OverviewReader;
   pool?: pg.Pool;
   triggerRefresh?: RefreshTrigger;
@@ -59,22 +65,33 @@ export const buildServer = (options: BuildServerOptions): FastifyInstance => {
   const limiter: GlobalLimiter = { active: 0, windowStartedAt: Date.now(), requestsInWindow: 0 };
   const releaseActiveRequest = new WeakMap<object, () => void>();
   let ownedPool: pg.Pool | undefined;
+  let databasePool = options.pool;
+  if (options.readOverview === undefined && !databasePool) {
+    ownedPool = new pg.Pool({
+      connectionString: options.config.databaseUrl,
+      max: options.config.poolMax,
+      connectionTimeoutMillis: options.config.connectionTimeoutMs,
+      idleTimeoutMillis: options.config.idleTimeoutMs,
+      query_timeout: options.config.queryTimeoutMs,
+      statement_timeout: options.config.queryTimeoutMs,
+      application_name: 'observatory-read-api',
+    });
+    databasePool = ownedPool;
+  }
   let reader = options.readOverview;
   if (reader === undefined) {
-    ownedPool =
-      options.pool ??
-      new pg.Pool({
-        connectionString: options.config.databaseUrl,
-        max: options.config.poolMax,
-        connectionTimeoutMillis: options.config.connectionTimeoutMs,
-        idleTimeoutMillis: options.config.idleTimeoutMs,
-        query_timeout: options.config.queryTimeoutMs,
-        statement_timeout: options.config.queryTimeoutMs,
-        application_name: 'observatory-overview-api',
-      });
-    const pool = ownedPool;
+    const pool = databasePool;
+    if (!pool) throw new Error('Database pool is required');
     reader = async (request, signal) =>
       readOverviewFromDatabase(pool, request, signal === undefined ? {} : { signal });
+  }
+  let historyReader = options.readHistory;
+  if (historyReader === undefined) {
+    const pool = databasePool;
+    historyReader = pool
+      ? async (request, signal) =>
+          readHistoryFromDatabase(pool, request, signal === undefined ? {} : { signal })
+      : () => Promise.reject(new Error('Historical context reader is unavailable'));
   }
   const triggerRefresh =
     options.triggerRefresh ??
@@ -139,6 +156,7 @@ export const buildServer = (options: BuildServerOptions): FastifyInstance => {
   });
 
   app.get('/health', async (_request, reply) => reply.send({ ok: true }));
+  registerProjectsHistory(app, { config: options.config, readHistory: historyReader });
   registerProjectsOverview(app, { config: options.config, readOverview: reader });
   registerProjectsRefresh(app, {
     config: options.config,
@@ -165,7 +183,7 @@ export const buildServer = (options: BuildServerOptions): FastifyInstance => {
     );
   });
 
-  if (ownedPool !== undefined && options.pool === undefined) {
+  if (ownedPool !== undefined) {
     app.addHook('onClose', async () => ownedPool?.end());
   }
   return app;

@@ -53,12 +53,16 @@ export class ObservationStore {
     }
   }
 
-  public async beginRun(source: string, scope: string): Promise<CollectionRun> {
+  public async beginRun(
+    source: string,
+    scope: string,
+    operation: 'snapshot' | 'history_backfill' = 'snapshot',
+  ): Promise<CollectionRun> {
     const result = await this.database.query<CollectionRun>(
-      `INSERT INTO collection_runs (source, scope, status)
-       VALUES ($1, $2, 'running')
+      `INSERT INTO collection_runs (source, scope, status, operation)
+       VALUES ($1, $2, 'running', $3)
        RETURNING id, source, scope`,
-      [source, scope],
+      [source, scope, operation],
     );
     const run = result.rows[0];
     if (!run) throw new Error('Failed to create collection run');

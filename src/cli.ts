@@ -6,12 +6,14 @@ import { generateWeeklyBriefing } from './briefing/generate.js';
 import { latestCompletedUtcWeekEnd } from './briefing/window.js';
 import { loadConfig } from './config.js';
 import { addAnnotation, type AnnotationKind } from './db/annotations.js';
-import { createDatabase } from './db/client.js';
+import { createDatabase, type Database } from './db/client.js';
 import { migrate } from './db/migrate.js';
 import { ObservationStore } from './db/observation-store.js';
 import { applyRetention } from './db/retention.js';
+import { dayBucket } from './domain/observation.js';
 import { GitHubClient } from './github/client.js';
 import { collectGitHub } from './github/collector.js';
+import { backfillGitHubHistory } from './github/history-backfill.js';
 import { normalizeGitHubObservations } from './normalization/github.js';
 
 if (existsSync('.env')) loadEnvFile('.env');
@@ -54,6 +56,38 @@ async function main(): Promise<void> {
         `${config.OBSERVATORY_GITHUB_OWNER}/${config.OBSERVATORY_GITHUB_REPOSITORY}`,
       );
       console.log(JSON.stringify({ normalized }));
+      return;
+    }
+
+    if (group === 'backfill' && command === 'github-history') {
+      await migrate(database);
+      const flags = parseFlags(arguments_);
+      const days = parseBoundedInteger(flags.days ?? '180', '--days', 7, 366);
+      const now = new Date();
+      const today = dayBucket(now);
+      const scope = `${config.OBSERVATORY_GITHUB_OWNER}/${config.OBSERVATORY_GITHUB_REPOSITORY}`;
+      const firstLiveAt = await firstLiveObservationAt(database, scope);
+      const throughExclusive = firstLiveAt && firstLiveAt < today ? dayBucket(firstLiveAt) : today;
+      const since = new Date(today.getTime() - days * 24 * 60 * 60 * 1_000);
+      if (since >= throughExclusive) {
+        console.log(
+          JSON.stringify({
+            inserted: 0,
+            normalized: 0,
+            reason: 'The requested interval is already covered by live observations.',
+          }),
+        );
+        return;
+      }
+      const result = await backfillGitHubHistory(
+        new GitHubClient(config.GITHUB_TOKEN),
+        new ObservationStore(database),
+        config.OBSERVATORY_GITHUB_OWNER,
+        config.OBSERVATORY_GITHUB_REPOSITORY,
+        { since, throughExclusive, generatedAt: now },
+      );
+      const normalized = await normalizeGitHubObservations(database, scope);
+      console.log(JSON.stringify({ ...result, normalized, since, throughExclusive }));
       return;
     }
 
@@ -100,7 +134,7 @@ async function main(): Promise<void> {
     }
 
     throw new Error(
-      'Usage: db migrate | collect github | normalize github | briefing weekly [--end YYYY-MM-DD] | annotate add --kind KIND --at ISO --title TITLE --url URL [--note NOTE] | maintenance retention',
+      'Usage: db migrate | collect github | normalize github | backfill github-history [--days 180] | briefing weekly [--end YYYY-MM-DD] | annotate add --kind KIND --at ISO --title TITLE --url URL [--note NOTE] | maintenance retention',
     );
   } finally {
     await database.end();
@@ -132,6 +166,33 @@ function requireFlag(flags: Record<string, string>, name: string): string {
   const value = flags[name];
   if (!value) throw new Error(`--${name} is required`);
   return value;
+}
+
+function parseBoundedInteger(
+  value: string,
+  label: string,
+  minimum: number,
+  maximum: number,
+): number {
+  if (!/^\d+$/.test(value)) throw new Error(`${label} must be an integer`);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${label} must be between ${minimum} and ${maximum}`);
+  }
+  return parsed;
+}
+
+async function firstLiveObservationAt(database: Database, scope: string): Promise<Date | null> {
+  const result = await database.query<{ first_live_at: Date | null }>(
+    `SELECT min(observed_bucket) AS first_live_at
+       FROM observations
+      WHERE source = 'github'
+        AND scope = $1
+        AND record_kind = ANY($2::text[])
+        AND NOT (payload ? 'derivation')`,
+    [scope, ['repository.summary', 'issues.summary']],
+  );
+  return result.rows[0]?.first_live_at ?? null;
 }
 
 function isAnnotationKind(value: string): value is AnnotationKind {

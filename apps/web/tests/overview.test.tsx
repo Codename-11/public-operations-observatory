@@ -2,11 +2,19 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import { describe, expect, it, vi } from 'vitest';
-import type { OverviewReadModelV1 } from '@public-operations-observatory/contracts';
+import type {
+  HistoricalContextReadModelV1,
+  OverviewReadModelV1,
+} from '@public-operations-observatory/contracts';
 
 import { OverviewPanels } from '../components/overview/overview-panels';
 import { ObservatoryShell } from '../components/shell/observatory-shell';
-import { fetchOverview, requestOverviewRefresh, type OverviewApiResult } from '../lib/api';
+import {
+  fetchHistoricalContext,
+  fetchOverview,
+  requestOverviewRefresh,
+  type OverviewApiResult,
+} from '../lib/api';
 
 const at = '2026-08-10T00:05:00.000Z';
 const baseOverview = (): OverviewReadModelV1 => ({
@@ -157,6 +165,69 @@ const baseOverview = (): OverviewReadModelV1 => ({
   },
 });
 
+const historyFixture = (): HistoricalContextReadModelV1 => ({
+  version: 1,
+  project: baseOverview().project,
+  period: '180d',
+  window: { start: '2026-02-11T00:00:00.000Z', end: at },
+  asOf: at,
+  series: [
+    {
+      metricKey: 'github.stars',
+      label: 'Active-star cohort at month end',
+      unit: 'count',
+      bucket: 'calendar-month-end',
+      method: 'lower-bound',
+      availability: 'partial',
+      limitation: 'Later unstars are absent.',
+      reasonCode: 'reconstructed-lower-bound',
+      evidenceUrl: 'https://github.com/Codename-11/hermes-relay/stargazers',
+      points: [],
+    },
+    {
+      metricKey: 'github.open_issues',
+      label: 'Reconstructed open issues at month end',
+      unit: 'count',
+      bucket: 'calendar-month-end',
+      method: 'reconstructed',
+      availability: 'partial',
+      limitation: 'Derived from lifecycle events.',
+      reasonCode: 'reconstructed',
+      evidenceUrl: 'https://github.com/Codename-11/hermes-relay/issues',
+      points: [],
+    },
+    {
+      metricKey: 'github.views',
+      label: 'Observed page views',
+      unit: 'views',
+      bucket: 'utc-day',
+      method: 'observed',
+      availability: 'unavailable',
+      limitation: 'Earlier traffic is unavailable.',
+      reasonCode: 'source-rolling-window',
+      evidenceUrl: null,
+      points: [],
+    },
+    {
+      metricKey: 'github.clones',
+      label: 'Observed repository clones',
+      unit: 'clones',
+      bucket: 'utc-day',
+      method: 'observed',
+      availability: 'unavailable',
+      limitation: 'Earlier traffic is unavailable.',
+      reasonCode: 'source-rolling-window',
+      evidenceUrl: null,
+      points: [],
+    },
+  ],
+  provenance: {
+    scope: 'Codename-11/hermes-relay',
+    generatedAt: at,
+    references: [],
+  },
+});
+
 const result = (data: OverviewReadModelV1): OverviewApiResult => ({ ok: true, data });
 
 describe('server Overview API client', () => {
@@ -179,6 +250,29 @@ describe('server Overview API client', () => {
       expect.objectContaining({
         cache: 'no-store',
         headers: { accept: 'application/json', authorization: 'Bearer secret-token' },
+      }),
+    );
+  });
+
+  it('fetches historical context through its separate authenticated contract', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(historyFixture()), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await expect(
+      fetchHistoricalContext('hermes-relay', {
+        fetcher,
+        baseUrl: 'http://127.0.0.1:4100',
+        token: 'server-only-token',
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://127.0.0.1:4100/api/v1/projects/hermes-relay/history?period=180d',
+      expect.objectContaining({
+        cache: 'no-store',
+        headers: { accept: 'application/json', authorization: 'Bearer server-only-token' },
       }),
     );
   });

@@ -97,7 +97,7 @@ const metricPresentation: ReadonlyArray<{
   label: string;
   unit: 'count' | 'views' | 'clones' | 'downloads';
 }> = [
-  { key: 'github.stars', label: 'Net stars', unit: 'count' },
+  { key: 'github.stars', label: 'Stars', unit: 'count' },
   { key: 'github.views', label: 'Page views', unit: 'views' },
   { key: 'github.clones', label: 'Repository clones', unit: 'clones' },
   {
@@ -172,6 +172,7 @@ export async function readOverview(
       bounds,
       view === 'current' ? asOfDate : bounds.end,
     );
+
     const latestRun = await readLatestRun(client, project.scope, asOfDate);
     const checkpoint = await readCheckpoint(client, project.scope, asOfDate);
     const annotations = await readAnnotations(client, project.scope, bounds, asOfDate);
@@ -184,6 +185,7 @@ export async function readOverview(
       briefing,
       checkpoint,
       freshnessHours,
+
       latestRun,
       project,
       records,
@@ -332,9 +334,10 @@ async function readLatestRun(
 ): Promise<RunRow | undefined> {
   const result = await client.query<RunRow>(
     `SELECT id, status, started_at, finished_at
-     FROM collection_runs
-     WHERE source = $1 AND scope = $2 AND status <> 'running'
-       AND finished_at IS NOT NULL AND started_at <= $3 AND finished_at <= $3
+    FROM collection_runs
+    WHERE source = $1 AND scope = $2 AND status <> 'running'
+      AND operation = 'snapshot'
+      AND finished_at IS NOT NULL AND started_at <= $3 AND finished_at <= $3
      ORDER BY finished_at DESC, started_at DESC, id DESC
      LIMIT 1`,
     ['github', scope, asOf],
@@ -405,6 +408,7 @@ function assembleOverview(input: {
   briefing: BriefingRow | undefined;
   checkpoint: CheckpointRow | undefined;
   freshnessHours: number;
+
   latestRun: RunRow | undefined;
   project: ReturnType<typeof getProject>;
   records: RecordRow[];
@@ -445,6 +449,7 @@ function assembleOverview(input: {
   );
   const annotations = input.annotations.map(buildAnnotation);
   const releaseTrend = buildReleaseTrend(input.records, input.bounds, effectiveValueAvailability);
+
   const latestSuccessfulAt =
     input.latestRun?.status === 'succeeded'
       ? input.latestRun.finished_at
@@ -510,6 +515,7 @@ function assembleOverview(input: {
     },
     warnings,
     changes,
+
     trend: {
       metricKey: 'github.release_asset_downloads',
       label: 'Release asset downloads',
@@ -572,7 +578,11 @@ function latestMetric(
   return {
     current: currentValue,
     previous: previousValue,
-    complete: currentValue !== null && previousValue !== null,
+    complete:
+      currentValue !== null &&
+      previousValue !== null &&
+      !payloadLowerBound(current?.payload) &&
+      !payloadLowerBound(previous?.payload),
     evidenceUrl: safeEvidenceUrl(current?.evidence_url),
     provenanceRefs: unique([
       ...(current ? [`record:${current.id}`] : []),
@@ -1171,6 +1181,14 @@ function payloadObject(payload: unknown): Record<string, unknown> | undefined {
   return payload !== null && typeof payload === 'object' && !Array.isArray(payload)
     ? (payload as Record<string, unknown>)
     : undefined;
+}
+
+function payloadDerivation(payload: unknown): Record<string, unknown> | undefined {
+  return payloadObject(payloadObject(payload)?.derivation);
+}
+
+function payloadLowerBound(payload: unknown): boolean {
+  return payloadDerivation(payload)?.lowerBound === true;
 }
 
 function payloadNumber(payload: unknown, key: string): number | null {

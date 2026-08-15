@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { loadConfig, type ApiConfig } from '../src/config.js';
-import { buildServer, type OverviewReader } from '../src/server.js';
+import { buildServer, type HistoryReader, type OverviewReader } from '../src/server.js';
 
 const overview = {
   version: 1,
@@ -77,6 +77,64 @@ const authConfig: ApiConfig = {
 
 const headers = { authorization: `Bearer ${authConfig.authToken}` };
 const reader: OverviewReader = vi.fn(() => Promise.resolve(overview));
+const history = {
+  version: 1,
+  project: overview.project,
+  period: '180d',
+  window: { start: '2026-02-11T00:00:00.000Z', end: overview.asOf },
+  asOf: overview.asOf,
+  series: [
+    [
+      'github.stars',
+      'Active-star cohort at month end',
+      'count',
+      'calendar-month-end',
+      'lower-bound',
+      'reconstructed-lower-bound',
+    ],
+    [
+      'github.open_issues',
+      'Reconstructed open issues at month end',
+      'count',
+      'calendar-month-end',
+      'reconstructed',
+      'reconstructed',
+    ],
+    [
+      'github.views',
+      'Observed page views',
+      'views',
+      'utc-day',
+      'observed',
+      'source-rolling-window',
+    ],
+    [
+      'github.clones',
+      'Observed repository clones',
+      'clones',
+      'utc-day',
+      'observed',
+      'source-rolling-window',
+    ],
+  ].map(([metricKey, label, unit, bucket, method, reasonCode]) => ({
+    metricKey,
+    label,
+    unit,
+    bucket,
+    method,
+    availability: 'unavailable',
+    limitation: 'Fixture limitation.',
+    reasonCode,
+    evidenceUrl: null,
+    points: [],
+  })),
+  provenance: {
+    scope: 'Codename-11/hermes-relay',
+    generatedAt: overview.asOf,
+    references: [],
+  },
+} as const;
+const historyReader: HistoryReader = vi.fn(() => Promise.resolve(history));
 
 const problem = (response: {
   headers: Record<string, string | number | string[] | undefined>;
@@ -152,6 +210,32 @@ describe('configuration', () => {
 });
 
 describe('read-only Overview API', () => {
+  it('serves independently validated historical context with constrained query parameters', async () => {
+    const app = buildServer({
+      config: authConfig,
+      readOverview: reader,
+      readHistory: historyReader,
+    });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/projects/hermes-relay/history?period=180d',
+      headers,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(history);
+    expect(historyReader).toHaveBeenCalledWith(
+      { projectKey: 'hermes-relay', period: '180d' },
+      expect.any(AbortSignal),
+    );
+    const rejected = await app.inject({
+      method: 'GET',
+      url: '/api/v1/projects/hermes-relay/history?period=180d&view=current',
+      headers,
+    });
+    expect(rejected.statusCode).toBe(400);
+    await app.close();
+  });
+
   it('denies missing, malformed, and incorrect bearer credentials without leaking details', async () => {
     const app = buildServer({ config: authConfig, readOverview: reader });
     for (const candidate of [undefined, 'Basic abc', 'Bearer wrong', 'Bearer a,b']) {

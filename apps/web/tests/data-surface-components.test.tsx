@@ -1,4 +1,7 @@
-import type { OverviewReadModelV1 } from '@public-operations-observatory/contracts';
+import type {
+  HistoricalContextReadModelV1,
+  OverviewReadModelV1,
+} from '@public-operations-observatory/contracts';
 import { render, screen, within } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import { describe, expect, it } from 'vitest';
@@ -237,6 +240,74 @@ describe('production data surfaces', () => {
       within(table).getByRole('row', { name: 'Stars count 120 115 +5 complete' }),
     ).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(forbidden);
+  });
+
+  it('renders best-effort history with exact endpoints and explicit limitations', () => {
+    const fixture = overviewFixture();
+    const history: HistoricalContextReadModelV1 = {
+      version: 1 as const,
+      project: fixture.project,
+      period: '180d' as const,
+      window: {
+        start: '2026-04-01T00:00:00.000Z',
+        end: '2026-08-10T00:00:00.000Z',
+      },
+      asOf: '2026-08-10T00:00:00.000Z',
+      series: [
+        {
+          metricKey: 'github.stars',
+          label: 'Active-star cohort',
+          unit: 'count',
+          bucket: 'calendar-month-end',
+          method: 'lower-bound',
+          availability: 'partial',
+          limitation: 'People who later unstarred are absent.',
+          reasonCode: 'reconstructed-lower-bound',
+          evidenceUrl: 'https://github.com/Codename-11/hermes-relay/stargazers',
+          points: [
+            {
+              timestamp: '2026-04-09T00:00:00.000Z',
+              availability: 'partial',
+              value: 1,
+              provenanceRefs: [],
+            },
+            {
+              timestamp: '2026-08-10T00:00:00.000Z',
+              availability: 'partial',
+              value: 118,
+              provenanceRefs: [],
+            },
+          ],
+        },
+      ],
+      provenance: {
+        scope: 'Codename-11/hermes-relay' as const,
+        generatedAt: '2026-08-10T00:00:00.000Z',
+        references: [],
+      },
+    };
+    render(<ReachAcquisitionSurface overview={fixture} history={history} />);
+
+    expect(
+      screen.getByRole('heading', { name: 'Best-effort historical signals' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Lower-bound reconstruction')).toBeInTheDocument();
+    expect(screen.getByText('People who later unstarred are absent.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: /Active-star cohort history.*1 to 118 count/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('118')).toBeInTheDocument();
+  });
+
+  it('keeps seven-day signals visible when independent historical context fails', () => {
+    render(<ReachAcquisitionSurface overview={overviewFixture()} history={null} />);
+    expect(screen.getByRole('heading', { name: 'Best-effort historical signals' })).toBeVisible();
+    expect(
+      screen.getByText(
+        'Historical context is unavailable. Current and completed seven-day signals remain valid.',
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Stars' })).toBeVisible();
   });
 
   it('labels the current observation view and reports observed traffic coverage', () => {

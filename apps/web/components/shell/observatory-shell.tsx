@@ -3,7 +3,7 @@
 import { MobileMenuButton, Sheet, TooltipProvider } from '@public-operations-observatory/ui';
 import { usePathname, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { PrimaryNavigation } from './navigation';
 
 export function ObservatoryShell({
@@ -15,7 +15,6 @@ export function ObservatoryShell({
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   const currentPath = usePathname();
-  const completedView = useSearchParams()?.get('view') === 'completed';
   return (
     <TooltipProvider delayDuration={250}>
       <a className="skip-link" href="#main-content">
@@ -54,9 +53,9 @@ export function ObservatoryShell({
             </div>
             <div className="review-context">
               <span className="context-label">Observation view</span>
-              <span>
-                {completedView ? 'Latest completed UTC week' : 'Current UTC observation window'}
-              </span>
+              <Suspense fallback={<span>Current UTC observation window</span>}>
+                <ObservationViewLabel />
+              </Suspense>
             </div>
           </header>
           <div className="tablet-navigation">
@@ -83,6 +82,14 @@ export function ObservatoryShell({
     </TooltipProvider>
   );
 }
+
+function ObservationViewLabel() {
+  const completedView = useSearchParams()?.get('view') === 'completed';
+  return (
+    <span>{completedView ? 'Latest completed UTC week' : 'Current UTC observation window'}</span>
+  );
+}
+
 function ProductName() {
   return (
     <div className="product-name">

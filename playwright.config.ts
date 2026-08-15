@@ -25,12 +25,12 @@ export default defineConfig({
       env: { E2E_FIXTURE_API_PORT: String(fixturePort), E2E_API_TOKEN: fixtureToken },
     },
     {
-      command: `corepack pnpm --filter @public-operations-observatory/web dev --hostname 127.0.0.1 --port ${webPort}`,
+      command: `corepack pnpm --filter @public-operations-observatory/web start --hostname 127.0.0.1 --port ${webPort}`,
       port: webPort,
       reuseExistingServer: false,
       timeout: 120_000,
       env: {
-        NODE_ENV: 'development',
+        NODE_ENV: 'production',
         OBSERVATORY_API_BASE_URL: `http://127.0.0.1:${fixturePort}`,
         OBSERVATORY_API_TOKEN: fixtureToken,
       },

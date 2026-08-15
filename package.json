@@ -12,6 +12,7 @@
     "build:root": "tsc -p tsconfig.build.json",
     "build:workspace": "corepack pnpm --recursive --include-workspace-root --if-present run build:root && corepack pnpm --recursive --filter './apps/**' --filter './packages/**' --if-present run build",
     "collect:github": "tsx src/cli.ts collect github",
+    "backfill:github-history": "tsx src/cli.ts backfill github-history",
     "normalize:github": "tsx src/cli.ts normalize github",
     "briefing:weekly": "tsx src/cli.ts briefing weekly",
     "db:migrate": "tsx src/cli.ts db migrate",

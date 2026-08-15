@@ -89,6 +89,7 @@ export async function generateWeeklyBriefing(
         `SELECT finished_at, status, error_summary, source_metadata
       FROM collection_runs
       WHERE source = 'github' AND scope = $1
+        AND operation = 'snapshot'
         AND finished_at IS NOT NULL AND finished_at <= $2
       ORDER BY finished_at DESC
       LIMIT 1`,

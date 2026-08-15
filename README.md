@@ -25,6 +25,8 @@ corepack pnpm db:migrate
 corepack pnpm collect:github
 # Re-run the idempotent normalizer independently when replaying source observations.
 corepack pnpm normalize:github
+# Optional one-time, bounded primary-source reconstruction before the first live snapshot.
+corepack pnpm backfill:github-history --days 180
 corepack pnpm exec tsx src/cli.ts annotate add \
   --kind release \
   --at 2026-08-11T12:00:00Z \
@@ -35,6 +37,10 @@ corepack pnpm maintenance:retention
 ```
 
 Briefings are written under `./out` by default. Without `--end`, the CLI uses the most recent completed Monday-to-Monday UTC week. Use `briefing weekly --end YYYY-MM-DD` through `src/cli.ts` to reproduce another fixed UTC window.
+
+`backfill:github-history` accepts 7–366 days and stops before the first directly observed repository/issue snapshot. It reconstructs a lower-bound active-star cohort from current stargazer timestamps and daily open-issue state from issue creation plus close/reopen events. Unchanged reruns are idempotent. The command cannot recover GitHub traffic outside GitHub's recent retention window or historical release-download timing from current cumulative counters. Derived points retain explicit method/limitation metadata; stargazer account identities are discarded before persistence.
+
+Historical context is served independently at `GET /api/v1/projects/:projectKey/history?period=180d`; it does not extend or alter the strict seven-day `OverviewReadModelV1` response. Star and open-issue points are reduced to calendar-month-end values, while views and clones expose only directly observed UTC-day records. Collection runs are classified as `snapshot` or `history_backfill`, and only snapshot runs contribute to operational freshness.
 
 ## Quality gates
 
@@ -62,4 +68,4 @@ The collector writes immutable source observations, then an independently runnab
 
 Deployment-specific backup transport, secret, and network configuration stays outside this public repository. To exercise a backup restore against a disposable database, set `DATABASE_URL`, `OBSERVATORY_RESTORE_DATABASE_URL`, and `OBSERVATORY_BACKUP_TEST_DIR`, then run `corepack pnpm maintenance:verify-restore`. The command creates a custom-format dump, restores it, compares migration and observation counts, and removes the disposable database.
 
-The collector obtains star totals only from the public repository summary. It deliberately does not call GitHub's identity-bearing stargazer-history endpoint; daily snapshots provide the durable star history without receiving account identities.
+Routine collection obtains star totals only from the public repository summary. The explicit historical backfill uses GitHub's timestamped stargazer response because no aggregate primary-source history exists, but discards account objects before persistence and stores only daily aggregate counts. No stargazer identity is written to observations, normalized records, checkpoints, metadata, or logs.

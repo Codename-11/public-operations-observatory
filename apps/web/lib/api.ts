@@ -1,7 +1,9 @@
 import 'server-only';
 
 import {
+  HistoricalContextReadModelV1Schema,
   OverviewReadModelV1Schema,
+  type HistoricalContextReadModelV1,
   type OverviewReadModelV1,
 } from '@public-operations-observatory/contracts';
 
@@ -9,6 +11,10 @@ export type OverviewApiFailureKind = 'configuration' | 'network' | 'status' | 'i
 
 export type OverviewApiResult =
   | { ok: true; data: OverviewReadModelV1 }
+  | { ok: false; kind: OverviewApiFailureKind; message: string };
+
+export type HistoryApiResult =
+  | { ok: true; data: HistoricalContextReadModelV1 }
   | { ok: false; kind: OverviewApiFailureKind; message: string };
 
 export type RefreshApiResult =
@@ -21,11 +27,12 @@ interface FetchOverviewOptions {
   view?: 'current' | 'completed';
 }
 
-const failure = (kind: OverviewApiFailureKind): OverviewApiResult => ({
-  ok: false,
-  kind,
-  message: 'Overview data is unavailable.',
-});
+const failure = (kind: OverviewApiFailureKind) =>
+  ({
+    ok: false,
+    kind,
+    message: 'Overview data is unavailable.',
+  }) as const;
 
 const configuredBaseUrl = (value: string | undefined): URL | undefined => {
   if (!value) return undefined;
@@ -84,6 +91,44 @@ export async function fetchOverview(
   try {
     const value: unknown = await response.json();
     const parsed = OverviewReadModelV1Schema.safeParse(value);
+    return parsed.success ? { ok: true, data: parsed.data } : failure('invalid-response');
+  } catch {
+    return failure('invalid-response');
+  }
+}
+
+export async function fetchHistoricalContext(
+  projectKey: string,
+  options: Omit<FetchOverviewOptions, 'view'> = {},
+): Promise<HistoryApiResult> {
+  const baseUrl = configuredBaseUrl(options.baseUrl ?? process.env.OBSERVATORY_API_BASE_URL);
+  const token = options.token ?? process.env.OBSERVATORY_API_TOKEN;
+  if (!baseUrl || !token || token.trim() === '' || projectKey !== 'hermes-relay') {
+    return failure('configuration');
+  }
+  const endpoint = new URL(
+    `/api/v1/projects/${encodeURIComponent(projectKey)}/history?period=180d`,
+    baseUrl,
+  );
+  let response: Response;
+  try {
+    response = await (options.fetcher ?? fetch)(endpoint.toString(), {
+      method: 'GET',
+      headers: { accept: 'application/json', authorization: ['Bearer', token].join(' ') },
+      cache: 'no-store',
+      redirect: 'error',
+    });
+  } catch {
+    return failure('network');
+  }
+  if (!response.ok) return failure('status');
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  if (contentType && !contentType.includes('application/json')) {
+    return failure('invalid-response');
+  }
+  try {
+    const value: unknown = await response.json();
+    const parsed = HistoricalContextReadModelV1Schema.safeParse(value);
     return parsed.success ? { ok: true, data: parsed.data } : failure('invalid-response');
   } catch {
     return failure('invalid-response');
