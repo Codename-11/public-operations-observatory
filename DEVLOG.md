@@ -35,3 +35,12 @@
 - Preserved server-only API access, bounded evidence links, generic failure details, page-level context on failure, partial and unavailable states, exact accessible tables, and existing disabled navigation for unsupported areas.
 - Added responsive navigation and layouts for all three routes, internal scrolling plus an explicit mobile hint for the exact Reach table, and verified no document overflow at 390 px or 320 px.
 - Expanded unit, axe, and Playwright coverage across selectors, surfaces, route state, API failure context, complete and partial fixtures, evidence dialogs, console errors, analytics absence, reduced motion, and desktop/mobile behavior.
+
+## 2026-08-14 — Current operational view and manual refresh
+
+- Added an explicit `current` Overview view using the latest persisted evidence at transaction time while preserving the completed Monday-to-Monday contract as the API-compatible historical default.
+- Made Current the default web view, added a Completed week switch, retained partial current values, reported observed traffic-day coverage, and withheld deltas when either comparison interval is incomplete.
+- Prevented first-ever snapshots of older cumulative release counters from being presented as interval downloads.
+- Added an authenticated, bodyless refresh endpoint backed by one startup-configured shell-free executable/argument tuple. Concurrent refresh requests join one in-flight trigger; collector and read-only API database responsibilities remain separate.
+- Added a server action and accessible Refresh now control with pending, success, and failure states. Browser requests never receive the internal API credential or collector command.
+- Changed the supplied GitHub collection timer to four daily runs at `02:15`, `08:15`, `14:15`, and `20:15` UTC and made Playwright ports overridable so deterministic browser tests can coexist with the live development runtime.

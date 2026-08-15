@@ -1,4 +1,6 @@
+import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
 import { readOverview as readOverviewFromDatabase } from '@public-operations-observatory/read-model';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -6,15 +8,20 @@ import pg from 'pg';
 
 import { loadConfig, type ApiConfig } from './config.js';
 import { sendProblem } from './problem-details.js';
+import { registerProjectsRefresh, type RefreshTrigger } from './routes/projects-refresh.js';
 import { registerProjectsOverview, type OverviewReader } from './routes/projects-overview.js';
 
 export type { OverviewReader } from './routes/projects-overview.js';
+export type { RefreshTrigger } from './routes/projects-refresh.js';
 
 interface BuildServerOptions {
   config: ApiConfig;
   readOverview?: OverviewReader;
   pool?: pg.Pool;
+  triggerRefresh?: RefreshTrigger;
 }
+
+const execFileAsync = promisify(execFile);
 
 interface GlobalLimiter {
   active: number;
@@ -69,6 +76,19 @@ export const buildServer = (options: BuildServerOptions): FastifyInstance => {
     reader = async (request, signal) =>
       readOverviewFromDatabase(pool, request, signal === undefined ? {} : { signal });
   }
+  const triggerRefresh =
+    options.triggerRefresh ??
+    (options.config.refreshCommand === undefined
+      ? undefined
+      : async () => {
+          const command = options.config.refreshCommand;
+          if (command === undefined) return;
+          await execFileAsync(command.executable, command.arguments, {
+            timeout: options.config.refreshTimeoutMs,
+            maxBuffer: 64 * 1_024,
+            windowsHide: true,
+          });
+        });
 
   app.addHook('onRequest', async (request, reply) => {
     for (const [name, value] of Object.entries(securityHeaders)) reply.header(name, value);
@@ -118,6 +138,10 @@ export const buildServer = (options: BuildServerOptions): FastifyInstance => {
 
   app.get('/health', async (_request, reply) => reply.send({ ok: true }));
   registerProjectsOverview(app, { config: options.config, readOverview: reader });
+  registerProjectsRefresh(app, {
+    config: options.config,
+    ...(triggerRefresh === undefined ? {} : { triggerRefresh }),
+  });
 
   app.setNotFoundHandler((_request, reply) =>
     sendProblem(reply, 404, 'The requested resource was not found.'),

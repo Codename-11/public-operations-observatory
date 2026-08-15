@@ -29,6 +29,7 @@ import {
 
 export function ExecutivePulseSurface({ overview }: { overview: OverviewReadModelV1 }) {
   const pulse = selectExecutivePulse(overview);
+  const view = overview.view ?? 'completed';
   const stars = pulse.stars?.change ?? null;
   const briefing = pulse.briefing.briefing;
   const lag = pulse.freshness.lag.milliseconds;
@@ -38,10 +39,16 @@ export function ExecutivePulseSurface({ overview }: { overview: OverviewReadMode
       <DataSurfaceHeader
         eyebrow="Executive pulse"
         title={`${overview.project.name} decision layer`}
-        description="Exact repository signals, briefing context, freshness, and source exceptions for the completed operating window."
+        description={
+          view === 'current'
+            ? 'Latest persisted repository signals, freshness, and source exceptions for the current observation window.'
+            : 'Exact repository signals, briefing context, freshness, and source exceptions for the completed operating window.'
+        }
         window={pulse.window}
         availability={pulse.availability}
         provenance={overview.provenance}
+        view={view}
+        projectKey={overview.project.key}
       />
       <SurfaceAvailabilityNotice availability={pulse.availability} />
 

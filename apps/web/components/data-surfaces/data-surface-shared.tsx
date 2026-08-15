@@ -22,6 +22,7 @@ import type { ReactNode } from 'react';
 
 import type { MetricChangeSelection } from '../../lib/data-surfaces';
 import { EvidenceSheet } from '../overview/evidence-sheet';
+import { OverviewControls } from './overview-controls';
 
 const integer = new Intl.NumberFormat('en-US');
 
@@ -57,6 +58,8 @@ export function DataSurfaceHeader({
   window,
   availability,
   provenance,
+  view,
+  projectKey,
 }: {
   eyebrow: string;
   title: string;
@@ -64,6 +67,8 @@ export function DataSurfaceHeader({
   window: OverviewWindowV1;
   availability: OverviewAvailability;
   provenance: OverviewProvenanceV1;
+  view: 'current' | 'completed';
+  projectKey: string;
 }) {
   return (
     <header className="data-surface-header">
@@ -72,12 +77,13 @@ export function DataSurfaceHeader({
         <h1>{title}</h1>
         <p>{description}</p>
         <p className="data-surface-window">
-          {formatDate(window.start)}–{formatDate(window.end)} UTC, end exclusive · exact 7-day
-          window compared with {formatDate(window.comparisonStart)}–
-          {formatDate(window.comparisonEnd)} UTC.
+          {view === 'current' ? 'Current observation window' : 'Completed reporting window'} ·{' '}
+          {formatDate(window.start)}–{formatDate(window.end)} UTC, end exclusive · compared with{' '}
+          {formatDate(window.comparisonStart)}–{formatDate(window.comparisonEnd)} UTC.
         </p>
       </div>
       <div className="data-surface-header__actions">
+        <OverviewControls projectKey={projectKey} view={view} />
         <StatusBadge status={availabilityStatus(availability)} detail={availability} />
         <EvidenceSheet provenance={provenance} />
       </div>
@@ -174,6 +180,13 @@ export function MetricComparisonCard({
             <dd>{change.delta === null ? 'Unavailable' : signed(change.delta)}</dd>
           </div>
         </dl>
+        {change.coverage ? (
+          <p className="data-surface-coverage">
+            Observed coverage: {change.coverage.currentObservedDays}/{change.coverage.requiredDays}{' '}
+            current days · {change.coverage.previousObservedDays}/{change.coverage.requiredDays}{' '}
+            prior days.
+          </p>
+        ) : null}
         {change.evidenceUrl ? (
           <EvidenceLink
             href={change.evidenceUrl}

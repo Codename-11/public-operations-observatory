@@ -152,15 +152,48 @@ describe('OverviewReadModelV1RequestSchema', () => {
       OverviewReadModelV1RequestSchema.parse({
         projectKey: 'hermes-relay',
         period: '7d',
+        view: 'completed',
         windowEnd: '2026-08-10T00:00:00.000Z',
         asOf: '2026-08-10T00:05:00.000Z',
       }),
     ).toEqual({
       projectKey: 'hermes-relay',
       period: '7d',
+      view: 'completed',
       windowEnd: '2026-08-10T00:00:00.000Z',
       asOf: '2026-08-10T00:05:00.000Z',
     });
+
+    expect(
+      OverviewReadModelV1RequestSchema.parse({
+        projectKey: 'hermes-relay',
+        period: '7d',
+        view: 'current',
+        asOf: '2026-08-10T00:05:00.000Z',
+      }),
+    ).toEqual({
+      projectKey: 'hermes-relay',
+      period: '7d',
+      view: 'current',
+      asOf: '2026-08-10T00:05:00.000Z',
+    });
+
+    expect(() =>
+      OverviewReadModelV1RequestSchema.parse({
+        projectKey: 'hermes-relay',
+        period: '7d',
+        view: 'current',
+        windowEnd: '2026-08-10T00:00:00.000Z',
+      }),
+    ).toThrow();
+
+    expect(() =>
+      OverviewReadModelV1RequestSchema.parse({
+        projectKey: 'hermes-relay',
+        period: '7d',
+        view: 'streaming',
+      }),
+    ).toThrow();
 
     expect(() =>
       OverviewReadModelV1RequestSchema.parse({ projectKey: 'hermes-relay', period: '30d' }),

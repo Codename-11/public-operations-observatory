@@ -1,8 +1,11 @@
 [Unit]
-Description=Collect Public Operations Observatory GitHub signals daily
+Description=Collect Public Operations Observatory GitHub signals every six hours
 
 [Timer]
 OnCalendar=*-*-* 02:15:00 UTC
+OnCalendar=*-*-* 08:15:00 UTC
+OnCalendar=*-*-* 14:15:00 UTC
+OnCalendar=*-*-* 20:15:00 UTC
 Persistent=true
 RandomizedDelaySec=10m
 

@@ -55,6 +55,7 @@ function TrendVisual({ trend }: { trend: OverviewTrendV1 }) {
 
 export function DeliverySourcesSurface({ overview }: { overview: OverviewReadModelV1 }) {
   const delivery = selectDeliverySources(overview);
+  const view = overview.view ?? 'completed';
   const downloads = delivery.releaseDownloads?.change ?? null;
   const release = delivery.release;
   const trend = delivery.trend;
@@ -68,6 +69,8 @@ export function DeliverySourcesSurface({ overview }: { overview: OverviewReadMod
         window={delivery.window}
         availability={delivery.availability}
         provenance={overview.provenance}
+        view={view}
+        projectKey={overview.project.key}
       />
       <SurfaceAvailabilityNotice availability={delivery.availability} />
 

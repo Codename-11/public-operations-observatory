@@ -67,7 +67,7 @@ const parseQuery = (request: FastifyRequest): Record<string, string> | undefined
   if (/%(?![0-9a-fA-F]{2})/.test(rawQuery)) return undefined;
 
   const query = new URLSearchParams(rawQuery);
-  const allowed = new Set(['period', 'windowEnd', 'asOf']);
+  const allowed = new Set(['period', 'view', 'windowEnd', 'asOf']);
   const parsed: Record<string, string> = {};
   for (const key of query.keys()) {
     if (!allowed.has(key) || query.getAll(key).length !== 1) return undefined;
@@ -104,6 +104,7 @@ export const registerProjectsOverview = (
       const result = OverviewReadModelV1RequestSchema.safeParse({
         projectKey: request.params.projectKey,
         period: query.period,
+        ...(query.view === undefined ? {} : { view: query.view }),
         ...(query.windowEnd === undefined ? {} : { windowEnd: query.windowEnd }),
         ...(query.asOf === undefined ? {} : { asOf: query.asOf }),
       });

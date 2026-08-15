@@ -11,10 +11,14 @@ export type OverviewApiResult =
   | { ok: true; data: OverviewReadModelV1 }
   | { ok: false; kind: OverviewApiFailureKind; message: string };
 
+export type RefreshApiResult =
+  { ok: true } | { ok: false; kind: OverviewApiFailureKind; message: string };
+
 interface FetchOverviewOptions {
   fetcher?: typeof fetch;
   baseUrl?: string;
   token?: string;
+  view?: 'current' | 'completed';
 }
 
 const failure = (kind: OverviewApiFailureKind): OverviewApiResult => ({
@@ -56,7 +60,7 @@ export async function fetchOverview(
   }
 
   const endpoint = new URL(
-    `/api/v1/projects/${encodeURIComponent(projectKey)}/overview?period=7d`,
+    `/api/v1/projects/${encodeURIComponent(projectKey)}/overview?period=7d&view=${options.view ?? 'current'}`,
     baseUrl,
   );
   let response: Response;
@@ -84,4 +88,29 @@ export async function fetchOverview(
   } catch {
     return failure('invalid-response');
   }
+}
+
+export async function requestOverviewRefresh(
+  projectKey: string,
+  options: Omit<FetchOverviewOptions, 'view'> = {},
+): Promise<RefreshApiResult> {
+  const baseUrl = configuredBaseUrl(options.baseUrl ?? process.env.OBSERVATORY_API_BASE_URL);
+  const token = options.token ?? process.env.OBSERVATORY_API_TOKEN;
+  if (!baseUrl || !token || token.trim() === '' || projectKey !== 'hermes-relay') {
+    return failure('configuration');
+  }
+
+  const endpoint = new URL(`/api/v1/projects/${encodeURIComponent(projectKey)}/refresh`, baseUrl);
+  let response: Response;
+  try {
+    response = await (options.fetcher ?? fetch)(endpoint.toString(), {
+      method: 'POST',
+      headers: { accept: 'application/json', authorization: ['Bearer', token].join(' ') },
+      cache: 'no-store',
+      redirect: 'error',
+    });
+  } catch {
+    return failure('network');
+  }
+  return response.ok ? { ok: true } : failure('status');
 }

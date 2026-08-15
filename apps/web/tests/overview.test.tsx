@@ -6,7 +6,7 @@ import type { OverviewReadModelV1 } from '@public-operations-observatory/contrac
 
 import { OverviewPanels } from '../components/overview/overview-panels';
 import { ObservatoryShell } from '../components/shell/observatory-shell';
-import { fetchOverview, type OverviewApiResult } from '../lib/api';
+import { fetchOverview, requestOverviewRefresh, type OverviewApiResult } from '../lib/api';
 
 const at = '2026-08-10T00:05:00.000Z';
 const baseOverview = (): OverviewReadModelV1 => ({
@@ -175,12 +175,42 @@ describe('server Overview API client', () => {
       }),
     ).resolves.toMatchObject({ ok: true });
     expect(fetcher).toHaveBeenCalledWith(
-      'https://api.internal.example/api/v1/projects/hermes-relay/overview?period=7d',
+      'https://api.internal.example/api/v1/projects/hermes-relay/overview?period=7d&view=current',
       expect.objectContaining({
         cache: 'no-store',
         headers: { accept: 'application/json', authorization: 'Bearer secret-token' },
       }),
     );
+  });
+
+  it('requests refresh server-to-server without a browser-visible body or credential', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ status: 'completed', joined: false }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await expect(
+      requestOverviewRefresh('hermes-relay', {
+        fetcher,
+        baseUrl: 'https://api.internal.example',
+        token: 'server-only-token',
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.internal.example/api/v1/projects/hermes-relay/refresh',
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          authorization: 'Bearer server-only-token',
+        },
+        cache: 'no-store',
+        redirect: 'error',
+      },
+    );
+    expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty('body');
   });
 
   it('allows a production server to call a loopback HTTP API', async () => {
@@ -201,7 +231,7 @@ describe('server Overview API client', () => {
         }),
       ).resolves.toMatchObject({ ok: true });
       expect(fetcher).toHaveBeenCalledWith(
-        'http://127.0.0.1:4100/api/v1/projects/hermes-relay/overview?period=7d',
+        'http://127.0.0.1:4100/api/v1/projects/hermes-relay/overview?period=7d&view=current',
         expect.any(Object),
       );
     } finally {

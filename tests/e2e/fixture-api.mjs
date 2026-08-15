@@ -4,6 +4,7 @@ const port = Number(process.env.E2E_FIXTURE_API_PORT ?? 4100);
 const expectedToken = process.env.E2E_API_TOKEN ?? 'ci-local-overview-token-0001';
 let mode = 'complete';
 let overviewRequests = [];
+let refreshRequests = 0;
 
 const base = {
   version: 1,
@@ -190,10 +191,11 @@ const server = http.createServer((request, response) => {
   if (request.method === 'POST' && url.pathname === '/__fixture/reset') {
     mode = url.searchParams.get('mode') === 'partial' ? 'partial' : 'complete';
     overviewRequests = [];
+    refreshRequests = 0;
     return json(response, 200, { mode });
   }
   if (request.method === 'GET' && url.pathname === '/__fixture/requests') {
-    return json(response, 200, { overviewRequests });
+    return json(response, 200, { overviewRequests, refreshRequests });
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/projects/hermes-relay/overview') {
     const authorization = request.headers.authorization ?? null;
@@ -201,10 +203,17 @@ const server = http.createServer((request, response) => {
       authorization,
       accept: request.headers.accept ?? null,
       period: url.searchParams.get('period'),
+      view: url.searchParams.get('view'),
     });
     if (authorization !== `Bearer ${expectedToken}`)
       return json(response, 401, { title: 'Unauthorized' });
-    return json(response, 200, fixture());
+    return json(response, 200, { ...fixture(), view: url.searchParams.get('view') ?? 'completed' });
+  }
+  if (request.method === 'POST' && url.pathname === '/api/v1/projects/hermes-relay/refresh') {
+    if (request.headers.authorization !== `Bearer ${expectedToken}`)
+      return json(response, 401, { title: 'Unauthorized' });
+    refreshRequests += 1;
+    return json(response, 200, { status: 'completed', joined: false });
   }
   return json(response, 404, { title: 'Not found' });
 });

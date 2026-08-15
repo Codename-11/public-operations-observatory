@@ -88,7 +88,8 @@ All later motion must respect `prefers-reduced-motion`, remain functional rather
 
 ## Operating cadence
 
-- Schedule durable GitHub snapshots at least daily; use a shorter cadence only for endpoints whose retention window or operational value requires it.
+- Schedule durable GitHub snapshots every six hours for the current operational view. Keep completed Monday-to-Monday windows as the separate reproducible reporting view.
+- Permit authenticated manual refresh through one fixed, shell-free operator command. Concurrent requests must join one in-flight collection and must not expose collector credentials to the browser or read-only API database role.
 - Record collection time, source freshness expectation, last successful checkpoint, API/rate-limit state, and partial failures.
 - Generate one weekly Markdown briefing from a fixed window and metric-definition version.
 - Link every material claim to a source URL or persisted observation reference.

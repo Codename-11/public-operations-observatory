@@ -87,6 +87,7 @@ function ComparisonVisual({ metrics }: { metrics: MetricChangeSelection[] }) {
 
 export function ReachAcquisitionSurface({ overview }: { overview: OverviewReadModelV1 }) {
   const reach = selectReachAcquisition(overview);
+  const view = overview.view ?? 'completed';
   const metrics = [reach.views, reach.clones, reach.stars].filter(
     (metric): metric is MetricChangeSelection => metric !== null,
   );
@@ -100,6 +101,8 @@ export function ReachAcquisitionSurface({ overview }: { overview: OverviewReadMo
         window={reach.window}
         availability={reach.availability}
         provenance={overview.provenance}
+        view={view}
+        projectKey={overview.project.key}
       />
       <SurfaceAvailabilityNotice availability={reach.availability} />
 

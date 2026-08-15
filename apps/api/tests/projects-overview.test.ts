@@ -71,6 +71,7 @@ const authConfig: ApiConfig = {
   concurrencyLimit: 8,
   rateLimitMax: 60,
   rateLimitWindowMs: 60_000,
+  refreshTimeoutMs: 60_000,
 };
 
 const headers = { authorization: `Bearer ${authConfig.authToken}` };
@@ -128,6 +129,39 @@ describe('configuration', () => {
       }),
     ).toThrow('API_DB_POOL_MAX');
   });
+
+  it('accepts only a paired fixed refresh executable and JSON argument array', () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'test',
+        DATABASE_URL: authConfig.databaseUrl,
+        API_AUTH_TOKEN: authConfig.authToken,
+        API_REFRESH_EXECUTABLE: '/usr/bin/systemctl',
+      }),
+    ).toThrow('configured together');
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'test',
+        DATABASE_URL: authConfig.databaseUrl,
+        API_AUTH_TOKEN: authConfig.authToken,
+        API_REFRESH_EXECUTABLE: 'systemctl',
+        API_REFRESH_ARGUMENTS_JSON: '[]',
+      }),
+    ).toThrow('absolute executable path');
+    expect(
+      loadConfig({
+        NODE_ENV: 'test',
+        DATABASE_URL: authConfig.databaseUrl,
+        API_AUTH_TOKEN: authConfig.authToken,
+        API_REFRESH_EXECUTABLE: '/usr/bin/systemctl',
+        API_REFRESH_ARGUMENTS_JSON:
+          '["--user","start","public-operations-observatory-collect.service"]',
+      }).refreshCommand,
+    ).toEqual({
+      executable: '/usr/bin/systemctl',
+      arguments: ['--user', 'start', 'public-operations-observatory-collect.service'],
+    });
+  });
 });
 
 describe('read-only Overview API', () => {
@@ -166,6 +200,7 @@ describe('read-only Overview API', () => {
       concurrencyLimit: authConfig.concurrencyLimit,
       rateLimitMax: authConfig.rateLimitMax,
       rateLimitWindowMs: authConfig.rateLimitWindowMs,
+      refreshTimeoutMs: authConfig.refreshTimeoutMs,
     };
     const app = buildServer({
       config: bypassConfig,
@@ -184,7 +219,7 @@ describe('read-only Overview API', () => {
     const app = buildServer({ config: authConfig, readOverview });
     const response = await app.inject({
       method: 'GET',
-      url: '/api/v1/projects/hermes-relay/overview?period=7d&windowEnd=2026-08-10T00%3A00%3A00.000Z&asOf=2026-08-10T00%3A05%3A00.000Z',
+      url: '/api/v1/projects/hermes-relay/overview?period=7d&view=current&asOf=2026-08-10T00%3A05%3A00.000Z',
       headers,
     });
     expect(response.statusCode).toBe(200);
@@ -192,7 +227,7 @@ describe('read-only Overview API', () => {
       {
         projectKey: 'hermes-relay',
         period: '7d',
-        windowEnd: '2026-08-10T00:00:00.000Z',
+        view: 'current',
         asOf: '2026-08-10T00:05:00.000Z',
       },
       expect.any(AbortSignal),
@@ -204,6 +239,8 @@ describe('read-only Overview API', () => {
   it.each([
     'period=30d',
     'period=7d&period=7d',
+    'period=7d&view=streaming',
+    'period=7d&view=current&windowEnd=2026-08-10T00%3A00%3A00.000Z',
     'period=7d&unknown=true',
     'period=7d&asOf=2026-08-10T00%3A05%3A00Z',
     'period=7d&windowEnd=2026-08-10T01%3A00%3A00.000%2B01%3A00',
@@ -341,6 +378,68 @@ describe('read-only Overview API', () => {
     });
     expect(following.statusCode).toBe(200);
     expect(readOverview).toHaveBeenCalledTimes(2);
+    await app.close();
+  });
+
+  it('keeps manual refresh authenticated, disabled by default, and bodyless', async () => {
+    const disabled = buildServer({ config: authConfig, readOverview: reader });
+    const unauthorized = await disabled.inject({
+      method: 'POST',
+      url: '/api/v1/projects/hermes-relay/refresh',
+    });
+    expect(unauthorized.statusCode).toBe(401);
+    const unavailable = await disabled.inject({
+      method: 'POST',
+      url: '/api/v1/projects/hermes-relay/refresh',
+      headers,
+    });
+    expect(unavailable.statusCode).toBe(503);
+    await disabled.close();
+
+    const triggerRefresh = vi.fn(() => Promise.resolve());
+    const enabled = buildServer({ config: authConfig, readOverview: reader, triggerRefresh });
+    const body = await enabled.inject({
+      method: 'POST',
+      url: '/api/v1/projects/hermes-relay/refresh',
+      headers: { ...headers, 'content-type': 'application/json' },
+      payload: { command: 'anything' },
+    });
+    expect(body.statusCode).toBe(400);
+    expect(triggerRefresh).not.toHaveBeenCalled();
+    await enabled.close();
+  });
+
+  it('joins concurrent refresh requests to one fixed trigger', async () => {
+    let finish: (() => void) | undefined;
+    const triggerRefresh = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const app = buildServer({ config: authConfig, readOverview: reader, triggerRefresh });
+    const first = app.inject({
+      method: 'POST',
+      url: '/api/v1/projects/hermes-relay/refresh',
+      headers,
+    });
+    await vi.waitFor(() => expect(triggerRefresh).toHaveBeenCalledTimes(1));
+    const second = app.inject({
+      method: 'POST',
+      url: '/api/v1/projects/hermes-relay/refresh',
+      headers,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(triggerRefresh).toHaveBeenCalledTimes(1);
+    finish?.();
+    const responses = await Promise.all([first, second]);
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
+    expect(
+      responses.map((response) => response.json<{ status: 'completed'; joined: boolean }>()),
+    ).toEqual([
+      { status: 'completed', joined: false },
+      { status: 'completed', joined: true },
+    ]);
     await app.close();
   });
 

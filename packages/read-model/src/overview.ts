@@ -85,6 +85,11 @@ interface MetricValue {
   evidenceUrl: string | null;
   provenanceRefs: string[];
   complete: boolean;
+  coverage?: {
+    currentObservedDays: number;
+    previousObservedDays: number;
+    requiredDays: 7;
+  };
 }
 
 const metricPresentation: ReadonlyArray<{
@@ -152,12 +157,21 @@ export async function readOverview(
     if (!timestamp) throw new Error('PostgreSQL did not return transaction_timestamp()');
 
     const asOfDate = request.asOf ? new Date(request.asOf) : timestamp;
-    const windowEnd = request.windowEnd
-      ? validateWindowEnd(new Date(request.windowEnd), asOfDate)
-      : latestCompletedUtcWeekEnd(asOfDate);
+    const view = request.view ?? 'completed';
+    const windowEnd =
+      view === 'current'
+        ? currentUtcDayEnd(asOfDate)
+        : request.windowEnd
+          ? validateWindowEnd(new Date(request.windowEnd), asOfDate)
+          : latestCompletedUtcWeekEnd(asOfDate);
     const bounds = windowBounds(windowEnd);
 
-    const records = await readRecords(client, project.scope, bounds, bounds.end);
+    const records = await readRecords(
+      client,
+      project.scope,
+      bounds,
+      view === 'current' ? asOfDate : bounds.end,
+    );
     const latestRun = await readLatestRun(client, project.scope, asOfDate);
     const checkpoint = await readCheckpoint(client, project.scope, asOfDate);
     const annotations = await readAnnotations(client, project.scope, bounds, asOfDate);
@@ -173,6 +187,7 @@ export async function readOverview(
       latestRun,
       project,
       records,
+      view,
     });
     const parsed = OverviewReadModelV1Schema.parse(response);
     await client.query('COMMIT');
@@ -393,6 +408,7 @@ function assembleOverview(input: {
   latestRun: RunRow | undefined;
   project: ReturnType<typeof getProject>;
   records: RecordRow[];
+  view: 'current' | 'completed';
 }): unknown {
   const sourceAvailability = determineSourceAvailability(
     input.latestRun,
@@ -475,6 +491,7 @@ function assembleOverview(input: {
 
   return {
     version: 1,
+    view: input.view,
     project: input.project,
     period: '7d',
     window: {
@@ -594,6 +611,11 @@ function windowSumMetric(
     complete,
     evidenceUrl: safeEvidenceUrl(last(currentRows)?.evidence_url),
     provenanceRefs: provenanceRefs.slice(0, MAX_PROVENANCE_REFS_PER_VALUE),
+    coverage: {
+      currentObservedDays: observedDayCount(currentRows),
+      previousObservedDays: observedDayCount(previousRows),
+      requiredDays: 7,
+    },
   };
 }
 
@@ -640,7 +662,11 @@ function counterMovement(
     const publishedAt = dateFromPayload(inWindow[0]?.payload, 'publishedAt');
     const firstPublishedInWindow =
       publishedAt !== null && publishedAt >= start && publishedAt < end;
-    if (!baseline && !firstPublishedInWindow) complete = false;
+    if (!baseline && !firstPublishedInWindow) {
+      complete = false;
+      refs.push(...inWindow.map((record) => `record:${record.id}`));
+      continue;
+    }
     let previous = baseline ? payloadNumber(baseline.payload, 'totalAssetDownloads') : 0;
     if (previous === null) {
       complete = false;
@@ -780,13 +806,15 @@ function buildChange(
 ): OverviewChangeV1 {
   const current = value?.current ?? null;
   const previous = value?.previous ?? null;
-  const delta = current !== null && previous !== null ? current - previous : null;
+  const delta =
+    value?.complete === true && current !== null && previous !== null ? current - previous : null;
   const common = {
     metricKey: presentation.key,
     label: presentation.label,
     unit: presentation.unit,
     evidenceUrl: value?.evidenceUrl ?? null,
     provenanceRefs: value?.provenanceRefs ?? [],
+    ...(value?.coverage === undefined ? {} : { coverage: value.coverage }),
   };
   if (availability === 'failed' || availability === 'empty') {
     return { ...common, availability, current: null, previous: null, delta: null };
@@ -1089,6 +1117,10 @@ function latestCompletedUtcWeekEnd(date: Date): Date {
   return end;
 }
 
+function currentUtcDayEnd(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1));
+}
+
 function validateWindowEnd(windowEnd: Date, asOf: Date): Date {
   const latest = latestCompletedUtcWeekEnd(asOf);
   const canonical =
@@ -1118,6 +1150,10 @@ function hasDailyCoverage(records: RecordRow[], start: Date, end: Date): boolean
     if (!days.has(new Date(time).toISOString().slice(0, 10))) return false;
   }
   return true;
+}
+
+function observedDayCount(records: RecordRow[]): number {
+  return new Set(records.map((record) => iso(record.effective_at).slice(0, 10))).size;
 }
 
 function sumPayload(records: RecordRow[], key: string): number | null {

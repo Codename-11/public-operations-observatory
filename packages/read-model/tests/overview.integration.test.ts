@@ -100,6 +100,71 @@ integration('PostgreSQL Overview read model', () => {
     expect(JSON.stringify(overview)).not.toContain('visitor');
   });
 
+  it('uses latest persisted evidence for the current UTC-day window with honest coverage', async () => {
+    await seedComplete(database);
+
+    const overview = await readOverview(database, {
+      projectKey: 'hermes-relay',
+      period: '7d',
+      view: 'current',
+      asOf,
+    });
+
+    expect(overview.view).toBe('current');
+    expect(overview.window).toEqual({
+      comparisonStart: '2026-08-05T00:00:00.000Z',
+      comparisonEnd: '2026-08-12T00:00:00.000Z',
+      start: '2026-08-12T00:00:00.000Z',
+      end: '2026-08-19T00:00:00.000Z',
+    });
+    expect(change(overview, 'github.stars')).toMatchObject({
+      availability: 'partial',
+      current: 125,
+      previous: 113,
+      delta: 12,
+    });
+    expect(change(overview, 'github.views')).toMatchObject({
+      availability: 'partial',
+      current: 70,
+      previous: 51,
+      delta: null,
+      coverage: {
+        currentObservedDays: 5,
+        previousObservedDays: 7,
+        requiredDays: 7,
+      },
+    });
+  });
+
+  it('does not treat an older release first observed in the current window as interval downloads', async () => {
+    await seedRun(
+      database,
+      '20000000-0000-4000-8000-000000000099',
+      'succeeded',
+      '2026-08-18T01:00:00Z',
+    );
+    await record(database, {
+      id: id(999),
+      kind: 'release.summary',
+      externalId: 'old-release',
+      effectiveAt: '2026-08-16T00:00:00Z',
+      payload: release(250, 'v0.9.0', '2026-08-01T12:00:00.000Z'),
+    });
+
+    const overview = await readOverview(database, {
+      projectKey: 'hermes-relay',
+      period: '7d',
+      view: 'current',
+      asOf,
+    });
+
+    expect(change(overview, 'github.release_asset_downloads')).toMatchObject({
+      current: null,
+      previous: null,
+      delta: null,
+    });
+  });
+
   it('retains honest partial and stale values while suppressing unsupported deltas', async () => {
     await seedRun(
       database,

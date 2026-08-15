@@ -88,12 +88,23 @@ const ProvenanceRefsSchema = z
     });
   });
 
-export const OverviewReadModelV1RequestSchema = z.strictObject({
-  projectKey: ProjectKeySchema,
-  period: OverviewPeriodSchema,
-  windowEnd: CanonicalIsoTimestampSchema.optional(),
-  asOf: CanonicalIsoTimestampSchema.optional(),
-});
+export const OverviewReadModelV1RequestSchema = z
+  .strictObject({
+    projectKey: ProjectKeySchema,
+    period: OverviewPeriodSchema,
+    view: z.enum(['current', 'completed']).optional(),
+    windowEnd: CanonicalIsoTimestampSchema.optional(),
+    asOf: CanonicalIsoTimestampSchema.optional(),
+  })
+  .superRefine((request, context) => {
+    if (request.view === 'current' && request.windowEnd !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['windowEnd'],
+        message: 'Current view determines its window end from asOf',
+      });
+    }
+  });
 
 export const OverviewProjectV1Schema = z.strictObject({
   key: ProjectKeySchema,
@@ -183,6 +194,13 @@ const OverviewChangeV1CommonShape = {
   unit: OverviewMetricUnitSchema,
   evidenceUrl: NullableEvidenceUrlSchema,
   provenanceRefs: ProvenanceRefsSchema,
+  coverage: z
+    .strictObject({
+      currentObservedDays: z.number().int().min(0).max(7),
+      previousObservedDays: z.number().int().min(0).max(7),
+      requiredDays: z.literal(7),
+    })
+    .optional(),
 };
 
 export const OverviewChangeV1Schema = z
@@ -222,7 +240,7 @@ export const OverviewChangeV1Schema = z
       const current = change.current;
       const previous = change.previous;
       const hasBothOperands = current !== null && previous !== null;
-      if (hasBothOperands && change.delta !== current - previous) {
+      if (hasBothOperands && change.delta !== null && change.delta !== current - previous) {
         context.addIssue({
           code: 'custom',
           path: ['delta'],
@@ -414,6 +432,7 @@ export const OverviewProvenanceV1Schema = z.strictObject({
 export const OverviewReadModelV1Schema = z
   .strictObject({
     version: z.literal(1),
+    view: z.enum(['current', 'completed']).optional(),
     project: OverviewProjectV1Schema,
     period: OverviewPeriodSchema,
     window: OverviewWindowV1Schema,

@@ -186,8 +186,13 @@ const forbidden = /conversion|attribution|unique visitors|weighted attention|cau
 const expectWindowAndEvidence = () => {
   expect(screen.getByText(/3 Aug 2026–10 Aug 2026 UTC, end exclusive/i)).toBeInTheDocument();
   expect(
-    screen.getByText(/exact 7-day window compared with 27 Jul 2026–3 Aug 2026 UTC/i),
+    screen.getByText(/Completed reporting window.*compared with 27 Jul 2026–3 Aug 2026 UTC/i),
   ).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Completed week' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  expect(screen.getByRole('button', { name: 'Refresh now' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Review evidence' })).toBeInTheDocument();
 };
 
@@ -232,6 +237,31 @@ describe('production data surfaces', () => {
       within(table).getByRole('row', { name: 'Stars count 120 115 +5 complete' }),
     ).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(forbidden);
+  });
+
+  it('labels the current observation view and reports observed traffic coverage', () => {
+    const fixture = overviewFixture();
+    const changes = fixture.changes.map((change) =>
+      change.metricKey === 'github.views'
+        ? {
+            ...change,
+            availability: 'partial' as const,
+            delta: null,
+            coverage: {
+              currentObservedDays: 5,
+              previousObservedDays: 7,
+              requiredDays: 7 as const,
+            },
+          }
+        : change,
+    );
+    render(<ReachAcquisitionSurface overview={{ ...fixture, view: 'current', changes }} />);
+
+    expect(screen.getByText(/Current observation window/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Current' })).toHaveAttribute('aria-current', 'page');
+    expect(
+      screen.getByText('Observed coverage: 5/7 current days · 7/7 prior days.'),
+    ).toBeInTheDocument();
   });
 
   it('renders delivery context, exact observed points, total, source state, and attention', () => {

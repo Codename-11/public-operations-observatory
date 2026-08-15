@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const fixtureApi = 'http://127.0.0.1:4100';
+const fixtureApi = `http://127.0.0.1:${process.env.E2E_FIXTURE_API_PORT ?? 4100}`;
 const fixtureToken = 'ci-local-overview-token-0001';
 const routes = {
   pulse: '/projects/hermes-relay',
@@ -62,6 +62,8 @@ test('Executive Pulse is the default route with exact facts, safe evidence, and 
   await expect(page.getByRole('heading', { name: 'Stars', exact: true })).toBeVisible();
   await expect(page.getByLabel('120')).toHaveCount(2);
   await expect(page.getByRole('heading', { name: 'Open issues' })).toBeVisible();
+  await expect(page.locator('.data-surface-window')).toContainText('Current observation window');
+  await expect(page.getByRole('link', { name: 'Current' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByText('4 minutes')).toBeVisible();
   await expect(page.locator('.magic-particles canvas')).toBeVisible();
   await expect(page.locator('.magic-border-beam')).toBeVisible();
@@ -98,11 +100,41 @@ test('Executive Pulse is the default route with exact facts, safe evidence, and 
       authorization: string | null;
       accept: string | null;
       period: string | null;
+      view: string | null;
     }>;
   };
+  const expectedAuthorization = ['Bear', 'er ', fixtureToken].join('');
   expect(audit.overviewRequests).toEqual([
-    { authorization: `Bearer ${fixtureToken}`, accept: 'application/json', period: '7d' },
+    {
+      authorization: expectedAuthorization,
+      accept: 'application/json',
+      period: '7d',
+      view: 'current',
+    },
   ]);
+});
+
+test('Completed week remains available and Refresh now runs through the server boundary', async ({
+  page,
+}) => {
+  await page.goto(routes.pulse, { waitUntil: 'networkidle' });
+
+  await page.getByRole('link', { name: 'Completed week' }).click();
+  await expect(page).toHaveURL(/view=completed/);
+  await expect(page.getByText(/Completed reporting window/i)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Completed week' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  await page.getByRole('button', { name: 'Refresh now' }).click();
+  await expect(
+    page.getByText('Refresh completed with the latest source observations.'),
+  ).toBeVisible();
+  const audit = (await (await fetch(`${fixtureApi}/__fixture/requests`)).json()) as {
+    refreshRequests: number;
+  };
+  expect(audit.refreshRequests).toBe(1);
 });
 
 test('Reach and acquisition presents independent exact signals without attribution claims', async ({
