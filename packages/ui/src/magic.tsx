@@ -140,7 +140,13 @@ export function NumberTicker({
       if (ref.current) ref.current.textContent = format(value);
       return;
     }
-    if (!isInView) return;
+    if (!isInView) {
+      // Keep the exact value readable when intersection never fires (headless,
+      // offscreen, or test environments). Animation remains progressive enhancement.
+      motionValue.jump(value);
+      if (ref.current) ref.current.textContent = format(value);
+      return;
+    }
     const timer = window.setTimeout(
       () => motionValue.set(direction === 'down' ? startValue : value),
       delay * 1000,
@@ -163,7 +169,7 @@ export function NumberTicker({
       style={{ display: 'inline-block', fontVariantNumeric: 'tabular-nums', ...style }}
       {...props}
     >
-      {format(reducedMotion ? value : initialValue)}
+      {format(value)}
     </span>
   );
 }
