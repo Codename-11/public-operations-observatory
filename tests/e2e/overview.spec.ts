@@ -40,6 +40,21 @@ async function expectNoOverflow(page: Page) {
     );
 }
 
+async function expectHistorySummaryTextContained(page: Page) {
+  const contained = await page.locator('.history-series-summary > div').evaluateAll((items) =>
+    items.every((item) => {
+      const parent = item.getBoundingClientRect();
+      return [...item.children].every((child) => {
+        const range = document.createRange();
+        range.selectNodeContents(child);
+        const text = range.getBoundingClientRect();
+        return text.left >= parent.left - 1 && text.right <= parent.right + 1;
+      });
+    }),
+  );
+  expect(contained).toBe(true);
+}
+
 function expectCleanBrowser(observed: ReturnType<typeof observeBrowser>) {
   expect(observed.errors).toEqual([]);
   expect(
@@ -235,6 +250,7 @@ for (const width of [390, 320]) {
       await expectNoOverflow(page);
       if (route === routes.reach) {
         await expect(page.getByText('Scroll horizontally for all exact columns.')).toBeVisible();
+        await expectHistorySummaryTextContained(page);
       }
     }
 
