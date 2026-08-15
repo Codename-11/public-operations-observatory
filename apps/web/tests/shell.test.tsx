@@ -59,11 +59,10 @@ describe('Observatory shell', () => {
     }
   });
 
-  it('renders unsupported destinations as disabled text, never dead links', () => {
+  it('renders the focused supported navigation and marks future operations as disabled', () => {
     shell();
     const navigation = screen.getByRole('navigation', { name: 'Primary' });
-    expect(within(navigation).getByText('Attention')).toHaveAttribute('aria-disabled', 'true');
-    expect(within(navigation).queryByRole('link', { name: 'Attention' })).not.toBeInTheDocument();
+    expect(within(navigation).queryByText('Attention')).not.toBeInTheDocument();
     expect(within(navigation).getByText('Briefings')).toHaveAttribute('aria-disabled', 'true');
     expect(within(navigation).getByRole('link', { name: 'Reach & acquisition' })).toHaveAttribute(
       'href',

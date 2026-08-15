@@ -223,21 +223,26 @@ describe('production data surfaces', () => {
   it('renders reach values as independent aggregate repository signals with an exact table', () => {
     render(<ReachAcquisitionSurface overview={overviewFixture()} />);
 
-    expectWindowAndEvidence();
-    expect(screen.getAllByText('Independent aggregate repository signals').length).toBeGreaterThan(
-      0,
+    expect(screen.getByRole('heading', { name: 'Reach & acquisition' })).toBeInTheDocument();
+    expect(screen.getByText(/3 Aug 2026–10 Aug 2026 UTC, end exclusive/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Completed week' })).toHaveAttribute(
+      'aria-current',
+      'page',
     );
+    expect(screen.getByRole('button', { name: 'Refresh data' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review evidence' })).toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: /metric, current/i })).toHaveLength(4);
     const table = screen.getByRole('table', {
-      name: 'Exact independent aggregate repository signal values',
+      name: 'Exact current-window repository signal values',
     });
     expect(
-      within(table).getByRole('row', { name: 'Views views 60 50 +10 complete' }),
+      within(table).getByRole('row', { name: 'Page views 60 50 Latest snapshot' }),
     ).toBeInTheDocument();
     expect(
-      within(table).getByRole('row', { name: 'Clones clones 22 20 +2 complete' }),
+      within(table).getByRole('row', { name: 'Repository clones 22 20 Latest snapshot' }),
     ).toBeInTheDocument();
     expect(
-      within(table).getByRole('row', { name: 'Stars count 120 115 +5 complete' }),
+      within(table).getByRole('row', { name: 'Stars 120 115 Latest snapshot' }),
     ).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(forbidden);
   });
@@ -288,25 +293,20 @@ describe('production data surfaces', () => {
     };
     render(<ReachAcquisitionSurface overview={fixture} history={history} />);
 
-    expect(
-      screen.getByRole('heading', { name: 'Best-effort historical signals' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Lower-bound reconstruction')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Signal history' })).toBeInTheDocument();
+    expect(screen.getByLabelText('History range: six months')).toHaveTextContent('6 months');
+    expect(screen.getAllByText('Lower-bound').length).toBeGreaterThan(0);
     expect(screen.getByText('People who later unstarred are absent.')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /Stars history.*1.*118/i })).toBeInTheDocument();
     expect(
-      screen.getByRole('img', { name: /Active-star cohort history.*1 to 118 count/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('118')).toBeInTheDocument();
+      screen.getByRole('region', { name: /Stars metric/i }).querySelector('polyline'),
+    ).toHaveAttribute('stroke-dasharray', '6 4');
   });
 
   it('keeps seven-day signals visible when independent historical context fails', () => {
     render(<ReachAcquisitionSurface overview={overviewFixture()} history={null} />);
-    expect(screen.getByRole('heading', { name: 'Best-effort historical signals' })).toBeVisible();
-    expect(
-      screen.getByText(
-        'Historical context is unavailable. Current and completed seven-day signals remain valid.',
-      ),
-    ).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Signal history' })).toBeVisible();
+    expect(screen.getByText('Historical values are unavailable.')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Stars' })).toBeVisible();
   });
 
@@ -330,9 +330,9 @@ describe('production data surfaces', () => {
 
     expect(screen.getByText(/Current observation window/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Current' })).toHaveAttribute('aria-current', 'page');
-    expect(
-      screen.getByText('Observed coverage: 5/7 current days · 7/7 prior days.'),
-    ).toBeInTheDocument();
+    const views = screen.getByRole('region', { name: /Page views metric/i });
+    expect(within(views).getByText('Coverage: 5/7 days')).toBeInTheDocument();
+    expect(within(views).getByText('Comparison unavailable')).toBeInTheDocument();
   });
 
   it('renders delivery context, exact observed points, total, source state, and attention', () => {

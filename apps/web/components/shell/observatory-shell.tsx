@@ -14,7 +14,13 @@ export function ObservatoryShell({
   children: ReactNode;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const currentPath = usePathname();
+  const currentPath = usePathname() ?? `/projects/${projectKey}`;
+  const reachSurface = currentPath.endsWith('/reach-acquisition');
+  const surfaceLabel = currentPath.endsWith('/delivery-sources')
+    ? 'Delivery & Sources'
+    : reachSurface
+      ? 'Reach & Acquisition'
+      : 'Executive Pulse';
   return (
     <TooltipProvider delayDuration={250}>
       <a className="skip-link" href="#main-content">
@@ -23,9 +29,11 @@ export function ObservatoryShell({
       <div className="observatory-shell">
         <aside className="desktop-sidebar" aria-label="Observatory">
           <ProductName />
+          <ProjectSelector projectKey={projectKey} />
           <PrimaryNavigation projectKey={projectKey} currentPath={currentPath} />
+          <SidebarFooter />
         </aside>
-        <div className="shell-body">
+        <div className={`shell-body ${reachSurface ? 'shell-body--reach' : ''}`.trim()}>
           <header className="topbar">
             <div className="mobile-menu">
               <Sheet
@@ -43,13 +51,9 @@ export function ObservatoryShell({
               </Sheet>
             </div>
             <div className="project-context">
-              <span className="project-monogram" aria-hidden="true">
-                HR
-              </span>
-              <div>
-                <span className="context-label">Project</span>
-                <strong>Hermes-Relay</strong>
-              </div>
+              <strong>Hermes-Relay</strong>
+              <span aria-hidden="true">/</span>
+              <span>{surfaceLabel}</span>
             </div>
             <div className="review-context">
               <span className="context-label">Observation view</span>
@@ -80,6 +84,30 @@ export function ObservatoryShell({
         </div>
       </div>
     </TooltipProvider>
+  );
+}
+
+function SidebarFooter() {
+  return (
+    <footer className="sidebar-footer">
+      <p>ⓘ &nbsp;Help &amp; Documentation ↗</p>
+      <div>
+        <span>© 2026 Public Operations Observatory</span>
+        <span>All times UTC</span>
+      </div>
+    </footer>
+  );
+}
+
+function ProjectSelector({ projectKey }: { projectKey: string }) {
+  return (
+    <div className="sidebar-project" aria-label="Selected project">
+      <span className="context-label">Project</span>
+      <div>
+        <strong>{projectKey === 'hermes-relay' ? 'Hermes-Relay' : projectKey}</strong>
+        <span aria-hidden="true">⌄</span>
+      </div>
+    </div>
   );
 }
 

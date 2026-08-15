@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useActionState } from 'react';
+import type { ReactNode } from 'react';
 import { useFormStatus } from 'react-dom';
 
 import { refreshOverview, type RefreshActionState } from '../../lib/refresh-action';
 
 const initialState: RefreshActionState = { status: 'idle', message: '' };
 
-function RefreshButton() {
+function RefreshButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -17,7 +18,7 @@ function RefreshButton() {
       disabled={pending}
       type="submit"
     >
-      {pending ? 'Refreshing…' : 'Refresh now'}
+      {pending ? 'Refreshing…' : label}
     </button>
   );
 }
@@ -25,9 +26,13 @@ function RefreshButton() {
 export function OverviewControls({
   projectKey,
   view,
+  refreshLabel = 'Refresh now',
+  middleAction,
 }: {
   projectKey: string;
   view: 'current' | 'completed';
+  refreshLabel?: string;
+  middleAction?: ReactNode;
 }) {
   const pathname = usePathname() ?? `/projects/${projectKey}`;
   const [state, action] = useActionState(refreshOverview, initialState);
@@ -50,9 +55,10 @@ export function OverviewControls({
           Completed week
         </Link>
       </nav>
+      {middleAction}
       <form action={action}>
         <input name="projectKey" type="hidden" value={projectKey} />
-        <RefreshButton />
+        <RefreshButton label={refreshLabel} />
       </form>
       <p
         className={`overview-refresh-status overview-refresh-status--${state.status}`}

@@ -40,21 +40,6 @@ async function expectNoOverflow(page: Page) {
     );
 }
 
-async function expectHistorySummaryTextContained(page: Page) {
-  const contained = await page.locator('.history-series-summary > div').evaluateAll((items) =>
-    items.every((item) => {
-      const parent = item.getBoundingClientRect();
-      return [...item.children].every((child) => {
-        const range = document.createRange();
-        range.selectNodeContents(child);
-        const text = range.getBoundingClientRect();
-        return text.left >= parent.left - 1 && text.right <= parent.right + 1;
-      });
-    }),
-  );
-  expect(contained).toBe(true);
-}
-
 function expectCleanBrowser(observed: ReturnType<typeof observeBrowser>) {
   expect(observed.errors).toEqual([]);
   expect(
@@ -159,32 +144,31 @@ test('Reach and acquisition presents independent exact signals without attributi
   const observed = observeBrowser(page);
   await page.goto(routes.reach, { waitUntil: 'domcontentloaded' });
 
-  await expect(
-    page.getByRole('heading', { name: 'Hermes-Relay repository signals' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Reach & acquisition' })).toBeVisible();
+  await expect(page.locator('.reach-metric__card')).toHaveCount(4);
   const table = page.getByRole('table', {
-    name: 'Exact independent aggregate repository signal values',
+    name: 'Exact current-window repository signal values',
   });
+  await expect(table.getByRole('row', { name: 'Page views 60 50 Latest snapshot' })).toBeVisible();
   await expect(
-    table.getByRole('row', { name: 'Page views views 60 50 +10 complete' }),
+    table.getByRole('row', { name: 'Repository clones 22 20 Latest snapshot' }),
   ).toBeVisible();
-  await expect(table.getByRole('row', { name: 'Clones clones 22 20 +2 complete' })).toBeVisible();
-  await expect(table.getByRole('row', { name: 'Stars count 120 115 +5 complete' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Best-effort historical signals' })).toBeVisible();
-  await expect(page.locator('.history-series-card')).toHaveCount(4);
-  await expect(
-    page.getByRole('img', { name: /Active-star cohort history.*1 to 120 count/i }),
-  ).toBeVisible();
+  await expect(table.getByRole('row', { name: 'Stars 120 115 Latest snapshot' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Signal history' })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Stars history.*1.*120/i })).toBeVisible();
   await expect(page.getByText('People who later unstarred are absent.')).toBeVisible();
   await expect(page.getByText('Earlier traffic history is unavailable.')).toHaveCount(2);
   await expect(page.getByRole('main')).not.toContainText(/conversion|attribution|unique visitors/i);
-  await expect(page.getByText('Scroll horizontally for all exact columns.')).toBeHidden();
+  await expect(page.getByText('Swipe to view prior values and coverage.')).toBeHidden();
   await expect(
     page.getByRole('navigation', { name: 'Primary' }).getByRole('link', {
       name: 'Reach & acquisition',
     }),
   ).toHaveAttribute('aria-current', 'page');
   await expectNoOverflow(page);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+    1000,
+  );
   expectCleanBrowser(observed);
 });
 
@@ -249,8 +233,12 @@ for (const width of [390, 320]) {
       await expect(page.locator('.tablet-navigation')).toBeHidden();
       await expectNoOverflow(page);
       if (route === routes.reach) {
-        await expect(page.getByText('Scroll horizontally for all exact columns.')).toBeVisible();
-        await expectHistorySummaryTextContained(page);
+        await expect(page.getByText('Swipe to view prior values and coverage.')).toBeVisible();
+        await expect(page.locator('.reach-metric__card')).toHaveCount(4);
+        const columns = await page
+          .locator('.reach-dashboard__metric-grid')
+          .evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+        expect(columns).toBe(width === 390 ? 2 : 1);
       }
     }
 
@@ -283,11 +271,15 @@ test('partial fixture keeps retained Reach facts and marks the unavailable curre
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(routes.reach, { waitUntil: 'domcontentloaded' });
 
-  await expect(page.getByText('Partial overview')).toBeVisible();
-  const views = page.getByLabel('Page views metric');
-  await expect(views.getByText('Unavailable')).toHaveCount(2);
-  await expect(views.getByText('50')).toBeVisible();
-  await expect(page.getByLabel('Stars metric').getByLabel('120')).toBeVisible();
+  const views = page.getByRole('region', { name: /Page views metric/i });
+  await expect(views.locator('.reach-metric__value')).toHaveText('Unavailable');
+  await expect(views.getByText('Comparison unavailable')).toBeVisible();
+  await expect(
+    page
+      .getByRole('table', { name: 'Exact current-window repository signal values' })
+      .getByRole('row', { name: 'Page views Unavailable 50 Unavailable' }),
+  ).toBeVisible();
+  await expect(page.getByRole('region', { name: /Stars metric/i }).getByText('120')).toBeVisible();
 });
 
 test('reduced motion disables repeated motion while preserving exact values', async ({ page }) => {
@@ -302,4 +294,10 @@ test('reduced motion disables repeated motion while preserving exact values', as
   await expect(page.getByLabel('31').first()).toHaveText('31');
   await expect(page.locator('.magic-border-beam > div')).toHaveCSS('offset-distance', '0%');
   await expectNoOverflow(page);
+
+  await page.goto(routes.reach, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('region', { name: /Stars metric/i }).getByText('120')).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: /Page views metric/i }).getByText('60'),
+  ).toBeVisible();
 });

@@ -1,14 +1,4 @@
-import {
-  Activity,
-  BarChart3,
-  BookOpenText,
-  GitPullRequestArrow,
-  Settings,
-  Siren,
-  Truck,
-  Wrench,
-  type LucideIcon,
-} from 'lucide-react';
+import { Activity, BarChart3, BookOpenText, Settings, Truck, type LucideIcon } from 'lucide-react';
 
 type Item = {
   label: string;
@@ -17,11 +7,8 @@ type Item = {
 };
 const sections: { label: string; items: Item[] }[] = [
   {
-    label: 'Review',
-    items: [
-      { label: 'Executive pulse', icon: Activity, href: (key) => `/projects/${key}` },
-      { label: 'Attention', icon: Siren },
-    ],
+    label: 'Overview',
+    items: [{ label: 'Executive pulse', icon: Activity, href: (key) => `/projects/${key}` }],
   },
   {
     label: 'Signals',
@@ -31,8 +18,6 @@ const sections: { label: string; items: Item[] }[] = [
         icon: BarChart3,
         href: (key) => `/projects/${key}/reach-acquisition`,
       },
-      { label: 'Support', icon: Wrench },
-      { label: 'Contributions', icon: GitPullRequestArrow },
       {
         label: 'Delivery & sources',
         icon: Truck,
@@ -80,7 +65,7 @@ export function PrimaryNavigation({
                   <span aria-disabled="true" title="Not available in this release">
                     <Icon aria-hidden="true" />
                     {label}
-                    <span className="nav-unavailable">Not available</span>
+                    <span className="nav-unavailable">Soon</span>
                   </span>
                 )}
               </li>
