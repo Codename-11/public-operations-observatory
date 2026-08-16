@@ -25,8 +25,17 @@ const integer = new Intl.NumberFormat('en-US');
 const compactDuration = (
   milliseconds: number,
 ): { accessibleLabel: string; value: string; unit: string } => {
-  if (milliseconds % 60_000 === 0) {
-    const minutes = milliseconds / 60_000;
+  if (milliseconds < 60_000) {
+    const seconds = Number((milliseconds / 1_000).toFixed(1));
+    return {
+      accessibleLabel: `${seconds} ${Math.abs(seconds) === 1 ? 'second' : 'seconds'}`,
+      value: String(seconds),
+      unit: 'sec',
+    };
+  }
+
+  if (milliseconds < 3_600_000) {
+    const minutes = Math.round(milliseconds / 60_000);
     return {
       accessibleLabel: `${minutes} ${Math.abs(minutes) === 1 ? 'minute' : 'minutes'}`,
       value: String(minutes),
@@ -34,11 +43,11 @@ const compactDuration = (
     };
   }
 
-  const seconds = Number((milliseconds / 1_000).toFixed(1));
+  const hours = Number((milliseconds / 3_600_000).toFixed(1));
   return {
-    accessibleLabel: `${seconds} ${Math.abs(seconds) === 1 ? 'second' : 'seconds'}`,
-    value: String(seconds),
-    unit: 'sec',
+    accessibleLabel: `${hours} ${Math.abs(hours) === 1 ? 'hour' : 'hours'}`,
+    value: String(hours),
+    unit: 'hr',
   };
 };
 

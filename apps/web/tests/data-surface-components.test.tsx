@@ -279,6 +279,34 @@ describe('production data surfaces', () => {
     expect(document.body).not.toHaveTextContent(/github\./i);
   });
 
+  it.each([
+    {
+      accessibleLabel: '4 minutes',
+      compactValue: '4 min',
+      lastSuccessfulAt: '2026-08-10T00:00:59.999Z',
+    },
+    {
+      accessibleLabel: '3.4 hours',
+      compactValue: '3.4 hr',
+      lastSuccessfulAt: '2026-08-09T20:38:08.900Z',
+    },
+  ])(
+    'renders non-aligned collection freshness as static $compactValue',
+    ({ accessibleLabel, compactValue, lastSuccessfulAt }) => {
+      const overview = overviewFixture();
+      overview.freshness = { ...overview.freshness, lastSuccessfulAt };
+
+      render(<ExecutivePulseSurface overview={overview} />);
+
+      const freshness = screen.getByRole('region', { name: 'Collection freshness fact' });
+      const freshnessValue = freshness.querySelector('.executive-pulse__fact-value');
+      expect(freshnessValue).toHaveTextContent(new RegExp(`^${compactValue}$`));
+      expect(within(freshness).getByLabelText(accessibleLabel)).toBeInTheDocument();
+      expect(freshnessValue).not.toHaveTextContent(/sec|milliseconds/i);
+      expect(freshnessValue?.querySelector('.magic-number-ticker, [class*="motion"]')).toBeNull();
+    },
+  );
+
   it('renders reach values as independent aggregate repository signals with an exact table', () => {
     render(<ReachAcquisitionSurface overview={overviewFixture()} />);
 
