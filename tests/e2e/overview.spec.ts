@@ -58,15 +58,40 @@ test('Executive Pulse is the default route with exact facts, safe evidence, and 
   const observed = observeBrowser(page);
   await page.goto(routes.pulse, { waitUntil: 'domcontentloaded' });
 
-  await expect(page.getByRole('heading', { name: 'Hermes-Relay decision layer' })).toBeVisible();
-  await expect(page.locator('#executive-stars-title')).toHaveText('Stars');
-  await expect(page.getByLabel('120')).toHaveCount(2);
-  await expect(page.getByRole('heading', { name: 'Open issues' })).toBeVisible();
-  await expect(page.locator('.data-surface-window')).toContainText('Current observation window');
+  const main = page.getByRole('main');
+  await expect(page.locator('.topbar')).toBeHidden();
+  await expect(main.getByRole('heading', { name: 'Executive pulse', level: 1 })).toBeVisible();
+  await expect(main.getByRole('heading', { level: 1 })).toHaveCount(1);
+
+  const facts = main.locator('.executive-pulse__fact-card');
+  await expect(facts).toHaveCount(4);
+  const stars = facts.filter({ has: page.getByRole('heading', { name: 'Stars' }) });
+  const openIssues = facts.filter({ has: page.getByRole('heading', { name: 'Open issues' }) });
+  await expect(stars).toHaveCount(1);
+  await expect(stars.locator('.executive-pulse__fact-number')).toHaveText('120');
+  await expect(openIssues).toHaveCount(1);
+  await expect(openIssues.locator('.executive-pulse__fact-number')).toHaveText('8');
+
+  await expect(main.locator('.executive-pulse__status')).toBeVisible();
+  await expect(main.locator('.executive-pulse__status-copy')).toContainText(
+    /collection|evidence|signal/i,
+  );
+  await expect(main.getByRole('heading', { name: 'Decision brief' })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'Evidence health' })).toBeVisible();
+
+  const attention = main.locator('.executive-pulse__attention-list');
+  const attentionRows = attention.locator('.executive-pulse__attention-row');
+  const attentionLabels = await attentionRows.locator('strong').allTextContents();
+  expect(new Set(attentionLabels).size).toBe(attentionLabels.length);
+  for (const label of attentionLabels) {
+    await expect(attention.getByText(label, { exact: true })).toHaveCount(1);
+  }
+
+  await expect(main).not.toContainText(/github\.[a-z_]+/i);
+  await expect(main.locator('.magic-particles, .magic-border-beam')).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Current' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByText('4 minutes')).toBeVisible();
-  await expect(page.locator('.magic-particles canvas')).toBeVisible();
-  await expect(page.locator('.magic-border-beam')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Completed week' })).toBeVisible();
 
   const primary = page.getByRole('navigation', { name: 'Primary' });
   await expect(primary.getByRole('link', { name: 'Executive pulse' })).toHaveAttribute(
@@ -93,6 +118,9 @@ test('Executive Pulse is the default route with exact facts, safe evidence, and 
   expect(clientResources.some((url) => url.includes('127.0.0.1:4100'))).toBe(false);
   expect(JSON.stringify(clientResources)).not.toContain(fixtureToken);
   await expectNoOverflow(page);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+    1000,
+  );
   expectCleanBrowser(observed);
 
   const audit = (await (await fetch(`${fixtureApi}/__fixture/requests`)).json()) as {
@@ -127,7 +155,7 @@ test('Completed week remains available and Refresh now runs through the server b
     'page',
   );
 
-  await page.getByRole('button', { name: 'Refresh now' }).click();
+  await page.getByRole('button', { name: 'Refresh data' }).click();
   await expect(
     page.getByText('Refresh completed with the latest source observations.'),
   ).toBeVisible();
@@ -224,6 +252,7 @@ test('tablet navigation exposes all supported routes and tracks the active surfa
 
 for (const width of [390, 320]) {
   test(`mobile ${width}px navigation and all data routes have no overflow`, async ({ page }) => {
+    await resetFixture('partial');
     await page.setViewportSize({ width, height: 844 });
     const observed = observeBrowser(page);
 
@@ -232,6 +261,19 @@ for (const width of [390, 320]) {
       await expect(page.locator('.desktop-sidebar')).toBeHidden();
       await expect(page.locator('.tablet-navigation')).toBeHidden();
       await expectNoOverflow(page);
+      if (route === routes.pulse) {
+        await expect(page.locator('.executive-pulse__status')).toBeVisible();
+        await expect(page.locator('.executive-pulse__fact-card')).toHaveCount(4);
+        const mobileAttention = page.locator('.executive-pulse__attention-list');
+        await expect(mobileAttention.getByText('Page views', { exact: true })).toHaveCount(1);
+        const columns = await page
+          .locator('.executive-pulse__fact-grid')
+          .evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+        expect(columns).toBe(width === 390 ? 2 : 1);
+        expect(
+          await page.evaluate(() => document.documentElement.scrollHeight),
+        ).toBeLessThanOrEqual(width === 390 ? 2200 : 2600);
+      }
       if (route === routes.reach) {
         await expect(page.getByText('Swipe to view prior values and coverage.')).toBeVisible();
         await expect(page.locator('.reach-metric__card')).toHaveCount(4);
@@ -243,6 +285,20 @@ for (const width of [390, 320]) {
     }
 
     await page.goto(routes.pulse, { waitUntil: 'domcontentloaded' });
+    const touchTargets = page.locator(
+      '.executive-pulse .reach-command a:visible, .executive-pulse .reach-command button:visible, .executive-pulse .ui-evidence-link:visible',
+    );
+    expect(await touchTargets.count()).toBeGreaterThan(0);
+    for (const box of await touchTargets.evaluateAll((elements) =>
+      elements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      }),
+    )) {
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+
     await page.keyboard.press('Tab');
     const skip = page.getByRole('link', { name: 'Skip to main content' });
     await expect(skip).toBeFocused();
@@ -285,6 +341,36 @@ test('partial fixture keeps retained Reach facts and marks the unavailable curre
 test('reduced motion disables repeated motion while preserving exact values', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(routes.pulse, { waitUntil: 'domcontentloaded' });
+
+  const pulse = page.locator('.executive-pulse');
+  await expect(pulse).toBeVisible();
+  await expect(pulse.locator('.executive-pulse__fact-card')).toHaveCount(4);
+  await expect(pulse.locator('.executive-pulse__workspace')).toBeVisible();
+  await expect(pulse.locator('.magic-particles, .magic-border-beam')).toHaveCount(0);
+  const motionSensitiveStyles = await pulse
+    .locator(
+      '.executive-pulse__status, .executive-pulse__fact-card, .executive-pulse__workspace, .executive-pulse__decision-row, .executive-pulse__attention-row, .executive-pulse__health-row',
+    )
+    .evaluateAll((elements) =>
+      elements.map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          opacity: style.opacity,
+          visibility: style.visibility,
+          transform: style.transform,
+          filter: style.filter,
+        };
+      }),
+    );
+  expect(
+    motionSensitiveStyles.every(
+      ({ opacity, visibility, transform, filter }) =>
+        opacity !== '0' && visibility !== 'hidden' && transform === 'none' && filter === 'none',
+    ),
+  ).toBe(true);
+  await expectNoOverflow(page);
+
   await page.goto(routes.delivery, { waitUntil: 'domcontentloaded' });
 
   await expect(page.getByRole('button', { name: 'Review evidence' })).toHaveCSS(

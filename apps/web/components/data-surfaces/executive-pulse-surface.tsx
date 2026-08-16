@@ -1,225 +1,321 @@
 'use client';
 
-import type { OverviewReadModelV1 } from '@public-operations-observatory/contracts';
+import type {
+  OverviewAvailability,
+  OverviewReadModelV1,
+} from '@public-operations-observatory/contracts';
 import {
-  BlurFade,
-  BorderBeam,
   Card,
   CardContent,
   CardHeader,
-  EmptyState,
   EvidenceLink,
-  Particles,
-  PanelState,
   StatusBadge,
 } from '@public-operations-observatory/ui';
 
-import { selectExecutivePulse } from '../../lib/data-surfaces';
 import {
-  AttentionList,
-  availabilityStatus,
-  DataSurfaceHeader,
-  formatTimestamp,
-  MetricComparisonCard,
-  MetricNumber,
-  SurfaceAvailabilityNotice,
-  SurfaceSection,
-  WarningList,
-} from './data-surface-shared';
+  buildExecutivePulseModel,
+  type ExecutivePulseAttentionItem,
+  type ExecutivePulseDecisionRow,
+} from '../../lib/executive-pulse-model';
+import { availabilityStatus } from './data-surface-shared';
+import { WorkspaceCommandHeader } from './reach-command-header';
+
+const integer = new Intl.NumberFormat('en-US');
+
+const compactDuration = (
+  milliseconds: number,
+): { accessibleLabel: string; value: string; unit: string } => {
+  if (milliseconds % 60_000 === 0) {
+    const minutes = milliseconds / 60_000;
+    return {
+      accessibleLabel: `${minutes} ${Math.abs(minutes) === 1 ? 'minute' : 'minutes'}`,
+      value: String(minutes),
+      unit: 'min',
+    };
+  }
+
+  const seconds = Number((milliseconds / 1_000).toFixed(1));
+  return {
+    accessibleLabel: `${seconds} ${Math.abs(seconds) === 1 ? 'second' : 'seconds'}`,
+    value: String(seconds),
+    unit: 'sec',
+  };
+};
+
+const textValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return 'Unavailable';
+  if (typeof value === 'boolean') return value ? 'Healthy' : 'Needs attention';
+  if (typeof value === 'string') {
+    const friendlyStates: Record<string, string> = {
+      complete: 'Complete',
+      healthy: 'Healthy',
+      partial: 'Partial',
+      stale: 'Stale',
+      failed: 'Failed',
+      empty: 'Unavailable',
+      unavailable: 'Unavailable',
+    };
+    return friendlyStates[value] ?? value;
+  }
+  if (typeof value === 'number' || typeof value === 'bigint') return String(value);
+  return 'Unavailable';
+};
+
+const briefingSummary = (briefing: unknown): string | null => {
+  if (typeof briefing === 'string' && briefing.length > 0) return briefing;
+  if (
+    briefing !== null &&
+    typeof briefing === 'object' &&
+    'summary' in briefing &&
+    typeof briefing.summary === 'string' &&
+    briefing.summary.length > 0
+  ) {
+    return briefing.summary;
+  }
+  return null;
+};
+
+const healthAvailability = (value: unknown): OverviewAvailability =>
+  value === 'complete' ||
+  value === 'partial' ||
+  value === 'stale' ||
+  value === 'failed' ||
+  value === 'empty'
+    ? value
+    : 'empty';
+
+const uniqueEvidenceActions = (
+  items: ExecutivePulseAttentionItem[],
+): Array<ExecutivePulseAttentionItem & { evidenceUrl: string }> => {
+  const actions = new Map<string, ExecutivePulseAttentionItem & { evidenceUrl: string }>();
+  for (const item of items) {
+    if (item.evidenceUrl !== null && !actions.has(item.evidenceUrl)) {
+      actions.set(item.evidenceUrl, { ...item, evidenceUrl: item.evidenceUrl });
+    }
+  }
+  return Array.from(actions.values());
+};
 
 export function ExecutivePulseSurface({ overview }: { overview: OverviewReadModelV1 }) {
-  const pulse = selectExecutivePulse(overview);
-  const view = overview.view ?? 'completed';
-  const stars = pulse.stars?.change ?? null;
-  const briefing = pulse.briefing.briefing;
-  const lag = pulse.freshness.lag.milliseconds;
+  const model = buildExecutivePulseModel(overview);
+  const facts = [
+    model.facts.stars,
+    model.facts.openIssues,
+    model.facts.trafficCoverage,
+    model.facts.freshness,
+  ];
+  const authoredSummary = briefingSummary(model.authoredBriefing);
+  const action = model.decisionRows.find((row: ExecutivePulseDecisionRow) => row.key === 'action')!;
+  const evidenceActions = uniqueEvidenceActions(model.attentionItems);
+  const trafficCoverage =
+    model.evidenceHealth.trafficObservedDays === null
+      ? 'Unavailable'
+      : `${model.evidenceHealth.trafficObservedDays}/${model.evidenceHealth.trafficRequiredDays} days`;
+  const freshness =
+    model.evidenceHealth.freshnessLagMilliseconds === null
+      ? 'Unavailable'
+      : `${Math.round(model.evidenceHealth.freshnessLagMilliseconds / 60_000)} minutes`;
 
   return (
-    <div className="data-surface data-surface--executive-pulse">
-      <DataSurfaceHeader
-        eyebrow="Executive pulse"
-        title={`${overview.project.name} decision layer`}
-        description={
-          view === 'current'
-            ? 'Latest persisted repository signals, freshness, and source exceptions for the current observation window.'
-            : 'Exact repository signals, briefing context, freshness, and source exceptions for the completed operating window.'
-        }
-        window={pulse.window}
-        availability={pulse.availability}
-        provenance={overview.provenance}
-        view={view}
-        projectKey={overview.project.key}
+    <div className="data-surface data-surface--executive-pulse executive-pulse">
+      <WorkspaceCommandHeader
+        overview={overview}
+        surfaceLabel="Executive Pulse"
+        heading="Executive pulse"
+        description="Operating state, material changes, and evidence requiring attention."
+        refreshLabel="Refresh data"
+        showWindow
       />
-      <SurfaceAvailabilityNotice availability={pulse.availability} />
 
-      <BlurFade className="data-surface-hero-wrap">
-        <section className="data-surface-hero signal-hero" aria-labelledby="executive-stars-title">
-          <Particles quantity={32} className="data-surface-hero__particles" />
-          <BorderBeam duration={10} />
-          <div className="data-surface-hero__content">
-            <p className="data-surface-eyebrow">Primary repository signal</p>
-            <h2 id="executive-stars-title">Stars</h2>
-            {stars?.current === null || stars === null ? (
-              <div className="signal-unavailable">
-                <strong>Stars unavailable</strong>
-                <p>No current Stars value was provided for this window.</p>
-              </div>
-            ) : (
-              <>
-                <p className="data-surface-hero__value">
-                  <MetricNumber value={stars.current} className="signal-value signal-value--hero" />
-                  <span>{stars.unit}</span>
-                </p>
-                <dl className="data-surface-hero__comparison">
-                  <div>
-                    <dt>Prior 7-day window</dt>
-                    <dd>{stars.previous ?? 'Unavailable'}</dd>
-                  </div>
-                  <div>
-                    <dt>Delta</dt>
-                    <dd>
-                      {stars.delta === null
-                        ? 'Unavailable'
-                        : `${stars.delta > 0 ? '+' : ''}${stars.delta}`}
-                    </dd>
-                  </div>
-                </dl>
-              </>
-            )}
-            {stars ? (
-              <StatusBadge
-                status={availabilityStatus(stars.availability)}
-                detail={stars.availability}
-              />
-            ) : null}
-            {stars?.evidenceUrl ? (
-              <EvidenceLink
-                href={stars.evidenceUrl}
-                aria-label="Open Stars evidence (opens in a new tab)"
-              >
-                Inspect Stars evidence
-              </EvidenceLink>
-            ) : null}
-          </div>
-        </section>
-      </BlurFade>
-
-      <SurfaceSection
-        id="executive-comparison-title"
-        title="Operating comparison"
-        description="Exact current, prior, and delta values from the Overview contract."
-      >
-        <div className="data-surface-metric-grid">
-          <BlurFade delay={0.05} inView>
-            <MetricComparisonCard metric={pulse.stars} />
-          </BlurFade>
-          <BlurFade delay={0.1} inView>
-            <MetricComparisonCard metric={pulse.openIssues} />
-          </BlurFade>
+      <section className="executive-pulse__status" aria-labelledby="executive-status-title">
+        <div className="executive-pulse__status-copy">
+          <h2 id="executive-status-title">{model.operatingStatus.title}</h2>
+          <p>{model.operatingStatus.detail}</p>
         </div>
-      </SurfaceSection>
+        <StatusBadge status={availabilityStatus(model.operatingStatus.availability)} />
+      </section>
 
-      <div className="data-surface-grid data-surface-grid--executive-context">
-        <Card aria-labelledby="executive-briefing-title">
-          <CardHeader>
-            <div>
-              <h2 id="executive-briefing-title">Briefing summary</h2>
-              <p>Bounded summary supplied by the Overview response</p>
-            </div>
-            <StatusBadge
-              status={availabilityStatus(briefing.availability)}
-              detail={briefing.availability}
-            />
-          </CardHeader>
-          <CardContent>
-            {briefing.availability === 'failed' ? (
-              <PanelState state="error" title="Briefing unavailable">
-                No briefing summary value is shown.
-              </PanelState>
-            ) : briefing.availability === 'empty' ? (
-              <EmptyState kind="no-records">No briefing summary for this period.</EmptyState>
-            ) : (
-              <>
-                {briefing.availability !== 'complete' ? (
-                  <PanelState
-                    state={briefing.availability}
-                    title={`${briefing.availability === 'partial' ? 'Partial' : 'Stale'} briefing`}
-                  >
-                    Retained briefing fields remain visible.
-                  </PanelState>
+      <section className="executive-pulse__fact-grid" aria-label="Executive pulse facts">
+        {facts.map((fact) => (
+          <Card
+            className="executive-pulse__fact-card"
+            role="region"
+            aria-label={`${fact.label} fact`}
+            key={fact.key}
+          >
+            <CardHeader>
+              <h2>{fact.label}</h2>
+            </CardHeader>
+            <CardContent>
+              <p
+                className={`executive-pulse__fact-value${
+                  fact.value === null ? ' executive-pulse__fact-value--unavailable' : ''
+                }`}
+              >
+                {fact.key === 'collection-freshness' && typeof fact.value === 'number' ? (
+                  <span aria-label={compactDuration(fact.value).accessibleLabel}>
+                    <span className="executive-pulse__fact-number">
+                      {compactDuration(fact.value).value}
+                    </span>{' '}
+                    <small className="executive-pulse__fact-unit">
+                      {compactDuration(fact.value).unit}
+                    </small>
+                  </span>
+                ) : fact.key === 'traffic-coverage' && typeof fact.value === 'number' ? (
+                  <>
+                    <span className="executive-pulse__fact-number">
+                      {fact.value}/{model.evidenceHealth.trafficRequiredDays}
+                    </span>{' '}
+                    <small className="executive-pulse__fact-unit">days</small>
+                  </>
+                ) : typeof fact.value === 'number' ? (
+                  <>
+                    <span className="executive-pulse__fact-number">
+                      {integer.format(fact.value)}
+                    </span>
+                    {fact.unit ? (
+                      <>
+                        {' '}
+                        <small className="executive-pulse__fact-unit">{fact.unit}</small>
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  textValue(fact.value)
+                )}
+              </p>
+              <p>{fact.detail}</p>
+              {fact.evidenceUrl ? (
+                <EvidenceLink
+                  href={fact.evidenceUrl}
+                  aria-label={`${fact.evidenceLabel} for ${fact.label} (opens in a new tab)`}
+                >
+                  {fact.evidenceLabel}
+                </EvidenceLink>
+              ) : (
+                <p>{fact.evidenceLabel}</p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+
+      <div className="executive-pulse__workspace">
+        <div className="executive-pulse__main">
+          <Card aria-labelledby="executive-decision-title">
+            <CardHeader>
+              <h2 id="executive-decision-title">Decision brief</h2>
+            </CardHeader>
+            <CardContent>
+              <dl className="executive-pulse__decision-list">
+                {model.decisionRows.map((row) => (
+                  <div className="executive-pulse__decision-row" key={row.key}>
+                    <dt>{row.label}</dt>
+                    <dd>{row.text}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="executive-pulse__briefing-note">
+                {authoredSummary ?? 'Authored briefing unavailable for this window.'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card aria-labelledby="executive-attention-title">
+            <CardHeader>
+              <div>
+                <h2 id="executive-attention-title">Needs attention</h2>
+                <p>
+                  {model.attentionItems.length}{' '}
+                  {model.attentionItems.length === 1 ? 'item' : 'items'}
+                </p>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {model.attentionItems.length === 0 ? (
+                <p>No evidence limitations require attention.</p>
+              ) : (
+                <ul className="executive-pulse__attention-list">
+                  {model.attentionItems.map((item) => (
+                    <li className="executive-pulse__attention-row" key={item.key}>
+                      <strong>{item.label}</strong>
+                      <span>{item.detail}</span>
+                      {item.evidenceUrl ? (
+                        <EvidenceLink
+                          href={item.evidenceUrl}
+                          aria-label={`Inspect ${item.label} evidence (opens in a new tab)`}
+                        >
+                          Inspect
+                        </EvidenceLink>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <aside className="executive-pulse__rail" aria-label="Evidence health and actions">
+          <Card aria-labelledby="executive-health-title">
+            <CardHeader>
+              <h2 id="executive-health-title">Evidence health</h2>
+            </CardHeader>
+            <CardContent>
+              <dl className="executive-pulse__health-list">
+                <div className="executive-pulse__health-row">
+                  <dt>Overall</dt>
+                  <dd>
+                    <StatusBadge
+                      status={availabilityStatus(healthAvailability(model.evidenceHealth.overall))}
+                    />
+                  </dd>
+                </div>
+                <div className="executive-pulse__health-row">
+                  <dt>Collection</dt>
+                  <dd>{textValue(model.evidenceHealth.collection)}</dd>
+                </div>
+                <div className="executive-pulse__health-row">
+                  <dt>Traffic coverage</dt>
+                  <dd>{trafficCoverage}</dd>
+                </div>
+                <div className="executive-pulse__health-row">
+                  <dt>Freshness</dt>
+                  <dd>{freshness}</dd>
+                </div>
+                <div className="executive-pulse__health-row">
+                  <dt>Briefing</dt>
+                  <dd>{textValue(model.evidenceHealth.briefing)}</dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card aria-labelledby="executive-evidence-actions-title">
+            <CardHeader>
+              <h2 id="executive-evidence-actions-title">Evidence actions</h2>
+            </CardHeader>
+            <CardContent>
+              <div className="executive-pulse__evidence-actions">
+                <p>{action.text}</p>
+                {evidenceActions.length > 0 ? (
+                  <ul>
+                    {evidenceActions.map((item) => (
+                      <li key={item.evidenceUrl}>
+                        <EvidenceLink
+                          href={item.evidenceUrl}
+                          aria-label={`Inspect ${item.label} evidence (opens in a new tab)`}
+                        >
+                          Inspect {item.label} evidence
+                        </EvidenceLink>
+                      </li>
+                    ))}
+                  </ul>
                 ) : null}
-                <p>{briefing.summary ?? 'Briefing summary unavailable'}</p>
-                <p>Generated {formatTimestamp(briefing.generatedAt)}</p>
-                {briefing.evidenceUrl ? (
-                  <EvidenceLink
-                    href={briefing.evidenceUrl}
-                    aria-label="Open briefing evidence (opens in a new tab)"
-                  >
-                    Inspect briefing evidence
-                  </EvidenceLink>
-                ) : null}
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card aria-labelledby="executive-freshness-title">
-          <CardHeader>
-            <div>
-              <h2 id="executive-freshness-title">Freshness</h2>
-              <p>UTC collection checkpoint state</p>
-            </div>
-            <StatusBadge
-              status={availabilityStatus(pulse.freshness.availability)}
-              detail={pulse.freshness.availability}
-            />
-          </CardHeader>
-          <CardContent>
-            <dl className="data-surface-freshness">
-              <div>
-                <dt>Checked</dt>
-                <dd>{formatTimestamp(pulse.freshness.freshness.checkedAt)}</dd>
               </div>
-              <div>
-                <dt>Last successful</dt>
-                <dd>{formatTimestamp(pulse.freshness.freshness.lastSuccessfulAt)}</dd>
-              </div>
-              <div>
-                <dt>Stale after</dt>
-                <dd>{formatTimestamp(pulse.freshness.freshness.staleAfter)}</dd>
-              </div>
-              <div>
-                <dt>{pulse.freshness.lag.label}</dt>
-                <dd>{lag === null ? 'Unavailable' : `${Math.round(lag / 60_000)} minutes`}</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="data-surface-grid data-surface-grid--attention">
-        <Card aria-labelledby="executive-attention-title">
-          <CardHeader>
-            <div>
-              <h2 id="executive-attention-title">Source attention</h2>
-              <p>Collection and metric-window exceptions only</p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <AttentionList attention={pulse.attention} />
-          </CardContent>
-        </Card>
-        <Card aria-labelledby="executive-warnings-title">
-          <CardHeader>
-            <div>
-              <h2 id="executive-warnings-title">Overview warnings</h2>
-              <p>Warnings supplied with this response</p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <WarningList warnings={pulse.warnings} />
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </aside>
       </div>
     </div>
   );

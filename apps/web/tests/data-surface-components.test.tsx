@@ -201,24 +201,82 @@ const expectWindowAndEvidence = () => {
 };
 
 describe('production data surfaces', () => {
-  it('renders the executive decision layer with exact values and honest context', () => {
-    render(<ExecutivePulseSurface overview={overviewFixture()} />);
+  it('renders the compact executive workspace with one heading and exact model facts', () => {
+    const overview = overviewFixture();
+    overview.attention = [];
+    overview.changes = overview.changes.map((change) =>
+      change.metricKey === 'github.views' || change.metricKey === 'github.clones'
+        ? {
+            ...change,
+            coverage: {
+              currentObservedDays: 7,
+              previousObservedDays: 7,
+              requiredDays: 7 as const,
+            },
+          }
+        : change,
+    );
+    render(<ExecutivePulseSurface overview={overview} />);
 
-    expectWindowAndEvidence();
-    const stars = screen.getByLabelText('Stars metric');
-    expect(within(stars).getByLabelText('120')).toBeInTheDocument();
-    expect(within(stars).getByText('115')).toBeInTheDocument();
-    expect(within(stars).getByText('+5')).toBeInTheDocument();
-    const issues = screen.getByLabelText('Open issues metric');
-    expect(within(issues).getByLabelText('8')).toBeInTheDocument();
-    expect(within(issues).getByText('10')).toBeInTheDocument();
-    expect(within(issues).getByText('-2')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Executive pulse' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Operating state, material changes, and evidence requiring attention.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Evidence ready · collection healthy')).toBeInTheDocument();
+    const factGrid = screen.getByRole('region', { name: 'Executive pulse facts' });
+    expect(screen.getAllByRole('region', { name: / fact$/i })).toHaveLength(4);
+    expect(factGrid.querySelector('.magic-number-ticker, [class*="motion"]')).toBeNull();
+
+    const stars = screen.getByRole('region', { name: 'Stars fact' });
+    const starsValue = stars.querySelector('.executive-pulse__fact-value');
+    expect(starsValue).toHaveTextContent(/^120 count$/);
+    expect(starsValue?.querySelector('.executive-pulse__fact-number')).toHaveTextContent('120');
+    expect(starsValue?.querySelector('.executive-pulse__fact-unit')).toHaveTextContent('count');
+    expect(stars).toHaveTextContent('Prior 115 · change +5.');
+    const issues = screen.getByRole('region', { name: 'Open issues fact' });
+    expect(issues.querySelector('.executive-pulse__fact-value')).toHaveTextContent(/^8 count$/);
+    expect(
+      issues.querySelector('.executive-pulse__fact-value .executive-pulse__fact-number'),
+    ).toHaveTextContent('8');
+    expect(issues).toHaveTextContent('Prior 10 · change -2.');
+    const traffic = screen.getByRole('region', { name: 'Traffic coverage fact' });
+    expect(traffic.querySelector('.executive-pulse__fact-value')).toHaveTextContent(/^7\/7 days$/);
+    expect(traffic.querySelector('.executive-pulse__fact-number')).toHaveTextContent('7/7');
+    expect(traffic).toHaveTextContent('7/7 observed days');
+    const freshness = screen.getByRole('region', { name: 'Collection freshness fact' });
+    expect(freshness.querySelector('.executive-pulse__fact-value')).toHaveTextContent(/^4 min$/);
+    expect(freshness.querySelector('.executive-pulse__fact-number')).toHaveTextContent('4');
+    expect(freshness.querySelector('.executive-pulse__fact-unit')).toHaveTextContent('min');
+    expect(freshness).not.toHaveTextContent(/240,000|milliseconds/i);
+
+    const window = screen.getByText(/Completed reporting window · 3 Aug 2026–10 Aug 2026 UTC/i);
+    expect(window).toHaveClass('reach-command__window');
+    expect(window).toBeVisible();
+
+    const decisionBrief = screen
+      .getByRole('heading', { name: 'Decision brief' })
+      .closest('section,article,div');
+    expect(decisionBrief).not.toBeNull();
+    for (const label of ['Changed', 'Known', 'Limited', 'Action']) {
+      expect(screen.getByText(label, { selector: 'dt' })).toBeInTheDocument();
+    }
     expect(
       screen.getByText('Evidence was assembled for this completed review window.'),
     ).toBeInTheDocument();
-    expect(screen.getByText('4 minutes')).toBeInTheDocument();
-    expect(screen.getByText('Traffic interval incomplete')).toBeInTheDocument();
+    expect(screen.getByText('No evidence limitations require attention.')).toBeInTheDocument();
+    expect(screen.getByText('0 items')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Evidence health' })).toBeInTheDocument();
+    const evidenceActions = screen
+      .getByRole('heading', { name: 'Evidence actions' })
+      .closest('section');
+    expect(evidenceActions).not.toBeNull();
+    expect(within(evidenceActions!).getByText('No evidence action required.')).toBeInTheDocument();
+    expect(within(evidenceActions!).queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText('Available')).toHaveLength(2);
+    expect(screen.queryByLabelText(/Available:\s*Complete/i)).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(forbidden);
+    expect(document.body).not.toHaveTextContent(/github\./i);
   });
 
   it('renders reach values as independent aggregate repository signals with an exact table', () => {
@@ -374,20 +432,41 @@ describe('production data surfaces', () => {
     expect(document.body).not.toHaveTextContent(forbidden);
   });
 
-  it('preserves partial values and labels unavailable fields instead of filling them', () => {
+  it('renders partial semantics, deduplicated attention, and the briefing fallback', () => {
     const overview = overviewFixture();
     overview.availability = 'partial';
-    overview.changes = overview.changes.map((change) =>
-      change.metricKey === 'github.stars'
-        ? {
-            ...change,
-            availability: 'partial' as const,
-            current: 120,
-            previous: null,
-            delta: null,
-          }
-        : change,
-    );
+    overview.freshness = { ...overview.freshness, availability: 'partial' };
+    overview.changes = overview.changes.map((change) => {
+      if (change.metricKey === 'github.stars') {
+        return {
+          ...change,
+          availability: 'partial' as const,
+          previous: null,
+          delta: null,
+        };
+      }
+      if (change.metricKey === 'github.views' || change.metricKey === 'github.clones') {
+        return {
+          ...change,
+          availability: 'partial' as const,
+          delta: null,
+          coverage: {
+            currentObservedDays: change.metricKey === 'github.views' ? 5 : 6,
+            previousObservedDays: 7,
+            requiredDays: 7 as const,
+          },
+        };
+      }
+      if (change.metricKey === 'github.release_asset_downloads') {
+        return {
+          ...change,
+          availability: 'partial' as const,
+          previous: null,
+          delta: null,
+        };
+      }
+      return change;
+    });
     overview.briefing = {
       availability: 'partial',
       summary: null,
@@ -398,11 +477,77 @@ describe('production data surfaces', () => {
 
     render(<ExecutivePulseSurface overview={overview} />);
 
-    expect(screen.getByText('Partial overview')).toBeInTheDocument();
-    const stars = screen.getByLabelText('Stars metric');
-    expect(within(stars).getByLabelText('120')).toBeInTheDocument();
-    expect(within(stars).getAllByText('Unavailable')).toHaveLength(2);
-    expect(screen.getByText('Briefing summary unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Partial evidence · collection partial')).toBeInTheDocument();
+    const stars = screen.getByRole('region', { name: 'Stars fact' });
+    expect(stars.querySelector('.executive-pulse__fact-number')).toHaveTextContent('120');
+    expect(stars).toHaveTextContent('Exact prior-period comparison unavailable.');
+    const attention = screen.getByRole('heading', { name: 'Needs attention' }).closest('section');
+    expect(attention).not.toBeNull();
+    expect(within(attention!).getByText('4 items')).toBeInTheDocument();
+    expect(within(attention!).getAllByRole('listitem')).toHaveLength(4);
+    for (const label of ['Stars', 'Views', 'Clones', 'Release asset downloads']) {
+      expect(within(attention!).getAllByText(label, { selector: 'strong' })).toHaveLength(1);
+    }
+    const evidenceActions = screen
+      .getByRole('heading', { name: 'Evidence actions' })
+      .closest('section');
+    expect(evidenceActions).not.toBeNull();
+    expect(evidenceActions).toHaveTextContent(
+      'Review incomplete collection evidence before acting on completed-window evidence.',
+    );
+    expect(within(evidenceActions!).getAllByRole('link')).toHaveLength(2);
+    expect(
+      within(evidenceActions!).getByRole('link', { name: /Inspect Stars evidence/i }),
+    ).toHaveAttribute('href', 'https://github.com/Codename-11/hermes-relay/stargazers');
+    expect(
+      within(evidenceActions!).getByRole('link', {
+        name: /Inspect Release asset downloads evidence/i,
+      }),
+    ).toHaveAttribute('href', 'https://github.com/Codename-11/hermes-relay/releases/tag/v1.2.3');
+    expect(
+      within(evidenceActions!).queryByText('Exact prior-period comparison unavailable.'),
+    ).toBeNull();
+    expect(screen.getAllByLabelText('Partial')).toHaveLength(2);
+    expect(screen.queryByLabelText(/Partial:\s*Partial/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Authored briefing unavailable for this window.')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/github\./i);
+  });
+
+  it('renders unavailable evidence without a healthy collection claim or green freshness dot', () => {
+    const overview = overviewFixture();
+    overview.availability = 'empty';
+    overview.freshness = {
+      availability: 'empty',
+      checkedAt: at,
+      lastSuccessfulAt: null,
+      staleAfter: null,
+    };
+    overview.changes[0] = {
+      ...overview.changes[0]!,
+      availability: 'empty',
+      current: null,
+      previous: null,
+      delta: null,
+    };
+
+    const { container } = render(<ExecutivePulseSurface overview={overview} />);
+
+    expect(screen.getByText('Evidence unavailable · collection unavailable')).toBeInTheDocument();
+    expect(screen.getByText('No successful collection')).toBeInTheDocument();
+    expect(container.querySelector('.reach-command__freshness > span')).not.toBeInTheDocument();
+    const stars = screen.getByRole('region', { name: 'Stars fact' });
+    const unavailableValue = within(stars).getByText('Unavailable');
+    expect(unavailableValue).toHaveClass(
+      'executive-pulse__fact-value',
+      'executive-pulse__fact-value--unavailable',
+    );
+    expect(stars.querySelector('.magic-number-ticker, [class*="motion"]')).toBeNull();
+    expect(stars).toHaveTextContent('Current value and exact comparison unavailable.');
+    expect(screen.getByText('2 items')).toBeInTheDocument();
+    const health = screen.getByRole('heading', { name: 'Evidence health' }).closest('section');
+    expect(health).not.toBeNull();
+    expect(within(health!).getAllByText(/unavailable/i).length).toBeGreaterThan(0);
+    expect(health).not.toHaveTextContent('Healthy');
   });
 
   it('does not provide an observed total when any interval is unavailable', () => {
@@ -444,8 +589,12 @@ describe('production data surfaces', () => {
     }));
 
     const executive = render(<ExecutivePulseSurface overview={overview} />);
-    expect(executive.container).toHaveTextContent('Last successfulUnavailable');
+    expect(executive.container).toHaveTextContent('No successful collection');
+    expect(executive.container).toHaveTextContent(
+      'No successful collection checkpoint is available.',
+    );
     expect(executive.container).not.toHaveTextContent('Unavailable UTC');
+    expect(executive.container.querySelector('.reach-command__freshness > span')).toBeNull();
     executive.unmount();
 
     const delivery = render(<DeliverySourcesSurface overview={overview} />);
