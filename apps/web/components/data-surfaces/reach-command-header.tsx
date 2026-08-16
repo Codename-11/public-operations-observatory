@@ -6,47 +6,96 @@ import { EvidenceSheet } from '../overview/evidence-sheet';
 import { formatDate } from './data-surface-shared';
 import { OverviewControls } from './overview-controls';
 
-const collectionLagLabel = (overview: OverviewReadModelV1): string => {
-  const { checkedAt, lastSuccessfulAt } = overview.freshness;
-  if (lastSuccessfulAt === null) return 'No successful collection';
+const collectionFreshness = (
+  overview: OverviewReadModelV1,
+): { healthy: boolean; label: string } => {
+  const { availability, checkedAt, lastSuccessfulAt, staleAfter } = overview.freshness;
+  if (lastSuccessfulAt === null) return { healthy: false, label: 'No successful collection' };
+
   const minutes = Math.max(
     0,
     Math.round((Date.parse(checkedAt) - Date.parse(lastSuccessfulAt)) / 60_000),
   );
-  return minutes < 1 ? 'Collected just now' : `Last collected ${minutes} min ago`;
+  const lagLabel = minutes < 1 ? 'collected just now' : `last collected ${minutes} min ago`;
+  const isPastStaleAfter = staleAfter !== null && Date.parse(checkedAt) >= Date.parse(staleAfter);
+
+  if (availability === 'failed')
+    return { healthy: false, label: `Collection failed · ${lagLabel}` };
+  if (availability === 'empty')
+    return { healthy: false, label: `Collection unavailable · ${lagLabel}` };
+  if (availability === 'stale' || isPastStaleAfter) {
+    return { healthy: false, label: `Collection stale · ${lagLabel}` };
+  }
+  if (availability === 'partial')
+    return { healthy: false, label: `Collection partial · ${lagLabel}` };
+  return {
+    healthy: true,
+    label: minutes < 1 ? 'Collected just now' : `Last collected ${minutes} min ago`,
+  };
 };
 
-export function ReachCommandHeader({ overview }: { overview: OverviewReadModelV1 }) {
+export interface WorkspaceCommandHeaderProps {
+  overview: OverviewReadModelV1;
+  surfaceLabel: string;
+  heading: string;
+  description: string;
+  refreshLabel: string;
+  showWindow?: boolean;
+}
+
+export function WorkspaceCommandHeader({
+  overview,
+  surfaceLabel,
+  heading,
+  description,
+  refreshLabel,
+  showWindow = false,
+}: WorkspaceCommandHeaderProps) {
   const view = overview.view ?? 'completed';
+  const freshness = collectionFreshness(overview);
   return (
-    <header className="reach-command">
+    <header className={`reach-command${showWindow ? ' reach-command--window-visible' : ''}`}>
       <div className="reach-command__bar">
         <p className="reach-command__breadcrumb">
           <strong>{overview.project.name}</strong>
           <span aria-hidden="true">/</span>
-          <span>Reach &amp; Acquisition</span>
+          <span>{surfaceLabel}</span>
         </p>
-        <p className="reach-command__freshness">
-          <span aria-hidden="true" />
-          {collectionLagLabel(overview)}
+        <p
+          className={`reach-command__freshness reach-command__freshness--${freshness.healthy ? 'healthy' : 'attention'}`}
+        >
+          {freshness.healthy ? <span aria-hidden="true" /> : null}
+          {freshness.label}
         </p>
         <div className="reach-command__actions">
           <OverviewControls
             projectKey={overview.project.key}
             view={view}
-            refreshLabel="Refresh data"
+            refreshLabel={refreshLabel}
             middleAction={<EvidenceSheet provenance={overview.provenance} />}
           />
         </div>
       </div>
       <div className="reach-command__heading">
-        <h1>Reach &amp; acquisition</h1>
-        <p>Repository attention, acquisition, and retained historical evidence.</p>
+        <h1>{heading}</h1>
+        <p>{description}</p>
         <p className="reach-command__window">
           {view === 'current' ? 'Current observation window' : 'Completed reporting window'} ·{' '}
           {formatDate(overview.window.start)}–{formatDate(overview.window.end)} UTC, end exclusive
         </p>
       </div>
     </header>
+  );
+}
+
+export function ReachCommandHeader({ overview }: { overview: OverviewReadModelV1 }) {
+  return (
+    <WorkspaceCommandHeader
+      overview={overview}
+      surfaceLabel="Reach & Acquisition"
+      heading="Reach & acquisition"
+      description="Repository attention, acquisition, and retained historical evidence."
+      refreshLabel="Refresh data"
+    />
   );
 }

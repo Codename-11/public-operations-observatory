@@ -14,13 +14,17 @@ export function ObservatoryShell({
   children: ReactNode;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const currentPath = usePathname() ?? `/projects/${projectKey}`;
-  const reachSurface = currentPath.endsWith('/reach-acquisition');
-  const surfaceLabel = currentPath.endsWith('/delivery-sources')
-    ? 'Delivery & Sources'
-    : reachSurface
-      ? 'Reach & Acquisition'
-      : 'Executive Pulse';
+  const projectRoot = `/projects/${projectKey}`;
+  const pathname = usePathname() ?? projectRoot;
+  const currentPath = pathname === `${projectRoot}/` ? projectRoot : pathname;
+  const reachSurface = currentPath === `${projectRoot}/reach-acquisition`;
+  const commandWorkspace = currentPath === projectRoot || reachSurface;
+  const surfaceLabel =
+    currentPath === `${projectRoot}/delivery-sources`
+      ? 'Delivery & Sources'
+      : reachSurface
+        ? 'Reach & Acquisition'
+        : 'Executive Pulse';
   return (
     <TooltipProvider delayDuration={250}>
       <a className="skip-link" href="#main-content">
@@ -33,7 +37,9 @@ export function ObservatoryShell({
           <PrimaryNavigation projectKey={projectKey} currentPath={currentPath} />
           <SidebarFooter />
         </aside>
-        <div className={`shell-body ${reachSurface ? 'shell-body--reach' : ''}`.trim()}>
+        <div
+          className={`shell-body ${commandWorkspace ? 'shell-body--command-workspace' : ''}`.trim()}
+        >
           <header className="topbar">
             <div className="mobile-menu">
               <Sheet

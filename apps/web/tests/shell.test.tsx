@@ -12,9 +12,9 @@ import {
   StatusBadge,
 } from '@public-operations-observatory/ui';
 
-const navigationState = vi.hoisted(() => ({
+const navigationState = vi.hoisted<{ pathname: string | null; view: string | null }>(() => ({
   pathname: '/projects/hermes-relay',
-  view: null as string | null,
+  view: null,
 }));
 vi.mock('next/navigation', () => ({
   usePathname: () => navigationState.pathname,
@@ -27,7 +27,8 @@ const shellCss = readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8')
 
 describe('Observatory shell', () => {
   it('provides landmarks, project context, skip navigation, and one active route', () => {
-    shell();
+    const { container } = shell();
+    expect(container.querySelector('.shell-body')).toHaveClass('shell-body--command-workspace');
     expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute(
       'href',
       '#main-content',
@@ -47,6 +48,64 @@ describe('Observatory shell', () => {
         name: 'Reach & acquisition',
       }),
     ).not.toHaveAttribute('aria-current');
+  });
+
+  it('marks the trailing-slash project root as a command workspace', () => {
+    navigationState.pathname = '/projects/hermes-relay/';
+    try {
+      const { container } = shell();
+      expect(container.querySelector('.shell-body')).toHaveClass('shell-body--command-workspace');
+      expect(container.querySelector('.shell-body')).not.toHaveClass('shell-body--reach');
+    } finally {
+      navigationState.pathname = '/projects/hermes-relay';
+    }
+  });
+
+  it('marks Reach as a command workspace and keeps its navigation item active', () => {
+    navigationState.pathname = '/projects/hermes-relay/reach-acquisition';
+    try {
+      const { container } = shell();
+      expect(container.querySelector('.shell-body')).toHaveClass('shell-body--command-workspace');
+      expect(
+        within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', {
+          name: 'Reach & acquisition',
+        }),
+      ).toHaveAttribute('aria-current', 'page');
+    } finally {
+      navigationState.pathname = '/projects/hermes-relay';
+    }
+  });
+
+  it('does not mark Delivery & Sources as a command workspace', () => {
+    navigationState.pathname = '/projects/hermes-relay/delivery-sources';
+    try {
+      const { container } = shell();
+      expect(container.querySelector('.shell-body')).not.toHaveClass(
+        'shell-body--command-workspace',
+      );
+      expect(
+        within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', {
+          name: 'Delivery & sources',
+        }),
+      ).toHaveAttribute('aria-current', 'page');
+    } finally {
+      navigationState.pathname = '/projects/hermes-relay';
+    }
+  });
+
+  it('falls back to the command-workspace project root when pathname is unavailable', () => {
+    navigationState.pathname = null;
+    try {
+      const { container } = shell();
+      expect(container.querySelector('.shell-body')).toHaveClass('shell-body--command-workspace');
+      expect(
+        within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', {
+          name: 'Executive pulse',
+        }),
+      ).toHaveAttribute('aria-current', 'page');
+    } finally {
+      navigationState.pathname = '/projects/hermes-relay';
+    }
   });
 
   it('labels the completed-week shell context only when that view is selected', () => {
