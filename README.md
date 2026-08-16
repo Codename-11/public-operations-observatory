@@ -44,6 +44,10 @@ Historical context is served independently at `GET /api/v1/projects/:projectKey/
 
 ## Quality gates
 
+Until the first public release, development defaults to fast direct iteration on `main`: make the narrow change, run the checks proportional to the affected surface, commit, push, deploy the affected service, and smoke-test the real runtime. Pull requests, independent review loops, and the full gate below are release/high-risk tools, not requirements for every internal iteration.
+
+Use focused tests plus lint/typecheck for routine model or component changes. Add a production build and targeted browser smoke for rendered UI changes. Run the full workspace, PostgreSQL, Playwright, audit, and deployment gate when changing contracts, migrations, authentication, collection semantics, cross-service behavior, or preparing a public release.
+
 ```bash
 corepack pnpm install --frozen-lockfile
 corepack pnpm build:workspace
