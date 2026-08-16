@@ -1,0 +1,392 @@
+.dashboard {
+  max-width: none;
+  gap: 0.75rem;
+  padding: 0 1rem 1rem;
+}
+
+.dashboard :global(.reach-command) {
+  margin-inline: -1rem;
+}
+
+.status {
+  min-height: 3.25rem;
+  padding: 0.65rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.status > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.status strong {
+  color: var(--text-primary);
+  font: 650 0.9rem/1.25 var(--font-display);
+}
+
+.statusEyebrow,
+.eyebrow {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.kpi {
+  min-width: 0;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.kpiHeading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.kpiHeading > span {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.kpiHeading small,
+.operations small {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+.kpiValue {
+  color: var(--text-primary);
+  font: 650 2.15rem/1 var(--font-data);
+  letter-spacing: -0.05em;
+}
+
+.delta {
+  min-height: 1rem;
+  color: var(--text-muted);
+  font: 600 0.7rem/1.25 var(--font-data);
+}
+
+.positive {
+  color: var(--positive);
+}
+
+.negative {
+  color: var(--attention);
+}
+
+.mainGrid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2.35fr) minmax(15rem, 0.85fr);
+  gap: 0.75rem;
+}
+
+.momentum,
+.attention {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.panelHeader {
+  min-height: 3.65rem;
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelHeader h2 {
+  margin: 0.12rem 0 0;
+  font: 650 1rem/1.25 var(--font-display);
+}
+
+.panelHeader a,
+.reviewLink {
+  color: var(--signal);
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.panelHeader > strong {
+  color: var(--text-muted);
+  font: 600 1rem/1 var(--font-data);
+}
+
+.lanes {
+  padding: 0.3rem 0.9rem 0;
+}
+
+.lane {
+  min-width: 0;
+  min-height: 4.65rem;
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr) 5.5rem;
+  align-items: center;
+  gap: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.lane:last-child {
+  border-bottom: 0;
+}
+
+.laneLabel {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.laneLabel span,
+.laneMethod {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  text-transform: capitalize;
+}
+
+.laneLabel strong {
+  font: 650 1.05rem/1 var(--font-data);
+}
+
+.lane svg {
+  width: 100%;
+  height: 3rem;
+  overflow: visible;
+}
+
+.chartGrid {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.chartLine {
+  fill: none;
+  stroke: var(--signal);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  vector-effect: non-scaling-stroke;
+  animation: draw-line 550ms var(--ease-standard) forwards;
+}
+
+.laneMethod {
+  text-align: right;
+}
+
+.unavailable {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.chartNote {
+  margin: 0;
+  padding: 0.55rem 0.9rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.attention ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attention li {
+  min-width: 0;
+  padding: 0.7rem 0.9rem;
+  display: grid;
+  gap: 0.2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.attention li strong {
+  font-size: 0.77rem;
+}
+
+.attention li span {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.reviewLink {
+  min-height: 2.75rem;
+  padding: 0 0.9rem;
+  display: flex;
+  align-items: center;
+}
+
+.empty {
+  margin: 0;
+  padding: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.operations {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.operations > div {
+  min-width: 0;
+  min-height: 4.25rem;
+  padding: 0.75rem 0.9rem;
+  display: grid;
+  align-content: center;
+  gap: 0.2rem;
+  border-right: 1px solid var(--border);
+}
+
+.operations > div:last-child {
+  border-right: 0;
+}
+
+.operations span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.operations strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font: 650 0.95rem/1.15 var(--font-data);
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+@keyframes draw-line {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chartLine {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (max-width: 1100px) {
+  .mainGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .attention ol {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .attention li {
+    border-right: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 760px) {
+  .kpiGrid,
+  .operations {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .operations > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .operations > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .attention ol {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 639px) {
+  .dashboard {
+    padding: 0 0.75rem 1rem;
+  }
+
+  .dashboard :global(.reach-command) {
+    margin-inline: -0.75rem;
+  }
+
+  .status {
+    align-items: flex-start;
+  }
+
+  .status > div {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .kpi {
+    padding: 0.75rem;
+  }
+
+  .kpiHeading {
+    align-items: flex-start;
+    display: grid;
+  }
+
+  .kpiValue {
+    font-size: 1.7rem;
+  }
+
+  .lane {
+    grid-template-columns: 4rem minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+
+  .laneMethod {
+    display: none;
+  }
+}
+
+@media (max-width: 359px) {
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -80,3 +80,10 @@
 - Limited motion to one 500 ms entrance treatment, with semantic chart summaries and a reduced-motion path that exposes the complete final chart immediately. Desktop, 390 px, and 320 px browser checks retain the five-second decision hierarchy and no document-level horizontal overflow.
 - Added a project Settings route with a cookie-persisted display timezone. The default is DST-aware Eastern Time (`America/New_York`), while UTC, Central, Mountain, and Pacific remain selectable. Display conversion does not mutate source timestamps or redefine the completed Monday-to-Monday UTC evidence window.
 - Routed operational dates and timestamps through the selected timezone across Executive Pulse, Reach & Acquisition, and Delivery & Sources. Collection freshness detail now uses compact seconds, minutes, or hours rather than raw milliseconds.
+
+## 2026-08-15 — Executive Pulse admin dashboard
+
+- Replaced the verbose decision/evidence stack with a one-viewport admin and marketing-operations composition: four performance KPIs, three honest 180-day momentum lanes, one short priority queue, and one operating-health strip.
+- Removed repeated Decision brief, Evidence health, Evidence actions, per-KPI evidence links, and duplicated limitation prose from the primary scan path. Detailed provenance remains available in Reach & Acquisition.
+- Reused the existing historical-context contract with independent chart scales for Stars, Views, and Clones. Latest-release download count remains a clearly labelled snapshot rather than a fabricated current-window total.
+- Verified the rendered composition at 1440 px, 390 px, and 320 px with no document-level overflow; focused component tests, lint, typecheck, formatting, and production build pass.

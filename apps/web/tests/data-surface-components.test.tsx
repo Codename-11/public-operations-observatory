@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import { DeliverySourcesSurface } from '../components/data-surfaces/delivery-sources-surface';
 import { DataSurfaceResult } from '../components/data-surfaces/data-surface-result';
+import { ExecutiveOpsDashboard } from '../components/data-surfaces/executive-ops-dashboard';
 import { ExecutivePulseSurface } from '../components/data-surfaces/executive-pulse-surface';
 import { ReachAcquisitionSurface } from '../components/data-surfaces/reach-acquisition-surface';
 
@@ -201,6 +202,27 @@ const expectWindowAndEvidence = () => {
 };
 
 describe('production data surfaces', () => {
+  it('renders Executive Pulse as a concise performance dashboard', () => {
+    render(<ExecutiveOpsDashboard overview={overviewFixture()} />);
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Performance overview' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Performance snapshot' })).toBeInTheDocument();
+    expect(screen.getAllByRole('article')).toHaveLength(4);
+    expect(screen.getByRole('article', { name: 'Release downloads metric' })).toHaveTextContent(
+      '31',
+    );
+    expect(screen.getByRole('heading', { name: 'Repository momentum' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Needs attention' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Operating health' })).toHaveTextContent(
+      'Open issues',
+    );
+    expect(screen.queryByRole('heading', { name: 'Decision brief' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Evidence health' })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(forbidden);
+  });
+
   it('renders the compact executive workspace with one heading and exact model facts', () => {
     const overview = overviewFixture();
     overview.attention = [];

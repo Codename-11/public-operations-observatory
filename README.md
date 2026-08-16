@@ -44,7 +44,7 @@ Historical context is served independently at `GET /api/v1/projects/:projectKey/
 
 ## Operator web behavior
 
-Executive Pulse keeps its four exact fact values visible on the first frame and adds compact evidence visualizations for supported comparisons, directly observed traffic coverage, and collection freshness. These charts animate once as presentation enhancement, never fabricate intermediate history, and render their final state immediately when reduced motion is enabled.
+Executive Pulse is the compact admin/marketing-operations view: four performance KPIs, a real 180-day repository-momentum panel, a three-item priority queue, and one operating-health strip. Historical lanes preserve separate scales and evidence methods rather than mixing unlike units or fabricating missing history; reduced motion renders their final state immediately.
 
 Project Settings provides a persisted display-timezone preference. Eastern Time (`America/New_York`) is the default and follows EST/EDT automatically; changing the preference converts displayed dates and timestamps only. Source timestamps and the reproducible Monday-to-Monday UTC reporting contract remain unchanged.
 
