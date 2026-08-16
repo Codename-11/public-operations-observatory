@@ -3,6 +3,7 @@ import type {
   OverviewReadModelV1,
 } from '@public-operations-observatory/contracts';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import { describe, expect, it } from 'vitest';
 
@@ -247,7 +248,8 @@ describe('production data surfaces', () => {
     expect(document.body).not.toHaveTextContent(forbidden);
   });
 
-  it('renders best-effort history with exact endpoints and explicit limitations', () => {
+  it('renders best-effort history with exact endpoints and explicit limitations', async () => {
+    const user = userEvent.setup();
     const fixture = overviewFixture();
     const history: HistoricalContextReadModelV1 = {
       version: 1 as const,
@@ -301,6 +303,26 @@ describe('production data surfaces', () => {
     expect(
       screen.getByRole('region', { name: /Stars metric/i }).querySelector('polyline'),
     ).toHaveAttribute('stroke-dasharray', '6 4');
+
+    const starsTab = screen.getByRole('tab', { name: 'Stars' });
+    const issuesTab = screen.getByRole('tab', { name: 'Open issues' });
+    const clonesTab = screen.getByRole('tab', { name: 'Clones' });
+    expect(starsTab).toHaveAttribute('tabindex', '0');
+    expect(issuesTab).toHaveAttribute('tabindex', '-1');
+    starsTab.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(issuesTab).toHaveFocus();
+    expect(issuesTab).toHaveAttribute('aria-selected', 'true');
+    expect(issuesTab).toHaveAttribute('tabindex', '0');
+    await user.keyboard('{End}');
+    expect(clonesTab).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(starsTab).toHaveFocus();
+
+    const limitation = screen.getByText('People who later unstarred are absent.');
+    const provenanceRow = limitation.closest('li');
+    expect(provenanceRow).not.toBeNull();
+    expect(within(provenanceRow as HTMLElement).getByText('Lower-bound')).toBeInTheDocument();
   });
 
   it('keeps seven-day signals visible when independent historical context fails', () => {

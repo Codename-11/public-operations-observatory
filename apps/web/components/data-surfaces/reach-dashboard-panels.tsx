@@ -2,6 +2,7 @@
 
 import type { OverviewReadModelV1 } from '@public-operations-observatory/contracts';
 import { Card, CardContent, CardHeader, StatusBadge } from '@public-operations-observatory/ui';
+import type { KeyboardEvent } from 'react';
 import { useId, useState } from 'react';
 
 import type {
@@ -335,6 +336,22 @@ export function SignalHistoryPanel({ metrics }: { metrics: ReachMetricModel[] })
   const tabId = useId();
   const [selectedKey, setSelectedKey] = useState<ReachMetricKey | undefined>(metrics[0]?.key);
   const selected = metrics.find(({ key }) => key === selectedKey) ?? metrics[0];
+  const selectTab = (key: ReachMetricKey, focus = false): void => {
+    setSelectedKey(key);
+    if (focus) document.getElementById(`${tabId}-${key}-tab`)?.focus();
+  };
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % metrics.length;
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + metrics.length) % metrics.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = metrics.length - 1;
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    const nextMetric = metrics[nextIndex];
+    if (nextMetric) selectTab(nextMetric.key, true);
+  };
 
   return (
     <Card className="reach-dashboard__panel" aria-labelledby={`${tabId}-title`}>
@@ -356,7 +373,7 @@ export function SignalHistoryPanel({ metrics }: { metrics: ReachMetricModel[] })
               role="tablist"
               aria-label="Choose a signal history"
             >
-              {metrics.map((metric) => {
+              {metrics.map((metric, index) => {
                 const isSelected = metric.key === selected.key;
                 return (
                   <button
@@ -368,7 +385,9 @@ export function SignalHistoryPanel({ metrics }: { metrics: ReachMetricModel[] })
                     id={`${tabId}-${metric.key}-tab`}
                     aria-controls={`${tabId}-${metric.key}-panel`}
                     aria-selected={isSelected}
-                    onClick={() => setSelectedKey(metric.key)}
+                    tabIndex={isSelected ? 0 : -1}
+                    onClick={() => selectTab(metric.key)}
+                    onKeyDown={(event) => handleTabKeyDown(event, index)}
                     key={metric.key}
                   >
                     {metric.shortLabel}
@@ -444,13 +463,20 @@ export function ProvenanceLimitationsPanel({ metrics }: { metrics: ReachMetricMo
           <p className="reach-dashboard__empty-state">No metric provenance is available.</p>
         ) : (
           <ul className="reach-dashboard__provenance-list">
-            {metrics.map((metric) => (
-              <li className="reach-dashboard__provenance-row" key={metric.key}>
-                <span className="sr-only">{metric.label}: </span>
-                <EvidenceBadge kind={metric.summaryEvidenceKind} />
-                <p>{metric.limitation ?? metric.description}</p>
-              </li>
-            ))}
+            {metrics.map((metric) => {
+              const describesHistory = metric.limitation !== null && metric.history !== null;
+              return (
+                <li className="reach-dashboard__provenance-row" key={metric.key}>
+                  <span className="sr-only">{metric.label}: </span>
+                  <EvidenceBadge
+                    kind={
+                      describesHistory ? metric.historyEvidenceKind : metric.currentEvidenceKind
+                    }
+                  />
+                  <p>{metric.limitation ?? metric.description}</p>
+                </li>
+              );
+            })}
           </ul>
         )}
       </CardContent>
