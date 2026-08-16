@@ -1,10 +1,10 @@
 import type { OverviewTrendPointV1 } from '@public-operations-observatory/contracts';
 import { Table } from '@public-operations-observatory/ui';
+import type { ObservatoryTimezone } from '../../lib/timezone';
+import { useTimezone } from '../timezone/timezone-provider';
 
-const formatDate = (value: string): string =>
-  new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
-    new Date(value),
-  );
+const formatDate = (value: string, timeZone: ObservatoryTimezone): string =>
+  new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone }).format(new Date(value));
 
 export function TrendDataTable({
   points,
@@ -15,10 +15,11 @@ export function TrendDataTable({
   label: string;
   unit: string;
 }) {
+  const { timezone } = useTimezone();
   return (
     <Table aria-label={`${label} data`}>
       <caption className="sr-only">
-        {label} by UTC interval, measured in {unit}
+        {label} by interval, measured in {unit}
       </caption>
       <thead>
         <tr>
@@ -30,7 +31,7 @@ export function TrendDataTable({
       <tbody>
         {points.map((point) => (
           <tr key={point.timestamp}>
-            <th scope="row">{formatDate(point.timestamp)}</th>
+            <th scope="row">{formatDate(point.timestamp, timezone)}</th>
             <td>{point.value ?? 'Unavailable'}</td>
             <td>{point.availability}</td>
           </tr>

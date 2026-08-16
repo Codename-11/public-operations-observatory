@@ -19,6 +19,7 @@ import {
 
 import { selectDeliverySources } from '../../lib/data-surfaces';
 import { TrendDataTable } from '../overview/trend-data-table';
+import { useTimezone } from '../timezone/timezone-provider';
 import {
   AttentionList,
   availabilityStatus,
@@ -54,6 +55,7 @@ function TrendVisual({ trend }: { trend: OverviewTrendV1 }) {
 }
 
 export function DeliverySourcesSurface({ overview }: { overview: OverviewReadModelV1 }) {
+  const { timezone } = useTimezone();
   const delivery = selectDeliverySources(overview);
   const view = overview.view ?? 'completed';
   const downloads = delivery.releaseDownloads?.change ?? null;
@@ -172,7 +174,7 @@ export function DeliverySourcesSurface({ overview }: { overview: OverviewReadMod
                 <dl className="data-surface-release-details">
                   <div>
                     <dt>Published</dt>
-                    <dd>{formatTimestamp(release.publishedAt)}</dd>
+                    <dd>{formatTimestamp(release.publishedAt, timezone)}</dd>
                   </div>
                   <div>
                     <dt>Asset downloads in release record</dt>
@@ -277,8 +279,10 @@ export function DeliverySourcesSurface({ overview }: { overview: OverviewReadMod
                   >
                     <div>
                       <strong>{source.label}</strong>
-                      <span>Last attempt {formatTimestamp(source.lastAttemptAt)}</span>
-                      <span>Last successful {formatTimestamp(source.lastSuccessfulAt)}</span>
+                      <span>Last attempt {formatTimestamp(source.lastAttemptAt, timezone)}</span>
+                      <span>
+                        Last successful {formatTimestamp(source.lastSuccessfulAt, timezone)}
+                      </span>
                     </div>
                     <StatusBadge
                       status={availabilityStatus(source.availability)}

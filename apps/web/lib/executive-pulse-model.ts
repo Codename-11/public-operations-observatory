@@ -200,11 +200,16 @@ const freshnessLag = (overview: OverviewReadModelV1): number | null =>
 
 const freshnessDetail = (lag: number | null): string => {
   if (lag === null) return 'No successful collection checkpoint is available.';
-  const minutes = lag / 60_000;
-  if (Number.isInteger(minutes)) {
+  if (lag < 60_000) {
+    const seconds = Number((lag / 1_000).toFixed(1));
+    return `${seconds} ${Math.abs(seconds) === 1 ? 'second' : 'seconds'} from last successful collection to freshness check.`;
+  }
+  if (lag < 3_600_000) {
+    const minutes = Math.round(lag / 60_000);
     return `${minutes} ${Math.abs(minutes) === 1 ? 'minute' : 'minutes'} from last successful collection to freshness check.`;
   }
-  return `${lag} milliseconds from last successful collection to freshness check.`;
+  const hours = Number((lag / 3_600_000).toFixed(1));
+  return `${hours} ${Math.abs(hours) === 1 ? 'hour' : 'hours'} from last successful collection to freshness check.`;
 };
 
 const freshnessFact = (lag: number | null, availability: OverviewAvailability): PulseFact => ({

@@ -21,23 +21,30 @@ import {
 import type { ReactNode } from 'react';
 
 import type { MetricChangeSelection } from '../../lib/data-surfaces';
+import { timezoneAbbreviation, type ObservatoryTimezone } from '../../lib/timezone';
 import { EvidenceSheet } from '../overview/evidence-sheet';
+import { useTimezone } from '../timezone/timezone-provider';
 import { OverviewControls } from './overview-controls';
 
 const integer = new Intl.NumberFormat('en-US');
 
-export const formatDate = (value: string): string =>
-  new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
-    new Date(value),
-  );
+export const formatDate = (value: string, timeZone: ObservatoryTimezone = 'UTC'): string =>
+  new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone }).format(new Date(value));
 
-export const formatTimestamp = (value: string | null): string =>
+export const formatTimestamp = (
+  value: string | null,
+  timeZone: ObservatoryTimezone = 'UTC',
+): string =>
   value
     ? `${new Intl.DateTimeFormat('en-GB', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'UTC',
-      }).format(new Date(value))} UTC`
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone,
+        timeZoneName: 'short',
+      }).format(new Date(value))}`
     : 'Unavailable';
 
 export const availabilityStatus = (
@@ -70,6 +77,7 @@ export function DataSurfaceHeader({
   view: 'current' | 'completed';
   projectKey: string;
 }) {
+  const { timezone } = useTimezone();
   return (
     <header className="data-surface-header">
       <div className="data-surface-header__copy">
@@ -78,8 +86,10 @@ export function DataSurfaceHeader({
         <p>{description}</p>
         <p className="data-surface-window">
           {view === 'current' ? 'Current observation window' : 'Completed reporting window'} ·{' '}
-          {formatDate(window.start)}–{formatDate(window.end)} UTC, end exclusive · compared with{' '}
-          {formatDate(window.comparisonStart)}–{formatDate(window.comparisonEnd)} UTC.
+          {formatDate(window.start, timezone)}–{formatDate(window.end, timezone)}{' '}
+          {timezoneAbbreviation(timezone, window.start)}, end exclusive · compared with{' '}
+          {formatDate(window.comparisonStart, timezone)}–
+          {formatDate(window.comparisonEnd, timezone)}.
         </p>
       </div>
       <div className="data-surface-header__actions">
@@ -205,6 +215,7 @@ export function AttentionList({
 }: {
   attention: Array<{ exception: OverviewSourceAttentionExceptionV1 }>;
 }) {
+  const { timezone } = useTimezone();
   if (attention.length === 0) {
     return <EmptyState kind="no-exceptions">No current source exceptions.</EmptyState>;
   }
@@ -219,7 +230,7 @@ export function AttentionList({
           <p>{exception.detail}</p>
           <span>
             {exception.sourceKey} · {exception.severity} · detected{' '}
-            {formatTimestamp(exception.detectedAt)}
+            {formatTimestamp(exception.detectedAt, timezone)}
           </span>
           {exception.evidenceUrl ? (
             <EvidenceLink

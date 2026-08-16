@@ -10,15 +10,11 @@ import type {
   ReachMetricKey,
   ReachMetricModel,
 } from '../../lib/reach-metric-registry';
+import type { ObservatoryTimezone } from '../../lib/timezone';
+import { useTimezone } from '../timezone/timezone-provider';
 
 const integer = new Intl.NumberFormat('en-US');
 const percentage = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
-const utcTimestamp = new Intl.DateTimeFormat('en-US', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'UTC',
-});
-const shortMonth = new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' });
 
 type BadgeStatus = 'available' | 'partial' | 'stale' | 'unavailable' | 'error';
 type ChartPoint = { timestamp: string; value: number };
@@ -26,7 +22,21 @@ type ChartPoint = { timestamp: string; value: number };
 const formatValue = (value: number | null): string =>
   value === null ? 'Unavailable' : integer.format(value);
 
-const formatUtc = (value: string): string => `${utcTimestamp.format(new Date(value))} UTC`;
+const formatTimestamp = (value: string, timeZone: ObservatoryTimezone): string =>
+  new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+    timeZoneName: 'short',
+  }).format(new Date(value));
+
+const formatChartTimestamp = (value: string, timeZone: ObservatoryTimezone): string =>
+  Number.isNaN(Date.parse(value))
+    ? value
+    : new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone }).format(new Date(value));
 
 const availabilityStatus = (availability: OverviewReadModelV1['availability']): BadgeStatus => {
   if (availability === 'complete') return 'available';
@@ -90,9 +100,16 @@ const chartCoordinates = (
 const polylinePoints = (coordinates: Array<{ x: number; y: number }>): string =>
   coordinates.map(({ x, y }) => `${x},${y}`).join(' ');
 
-const chartAriaLabel = (label: string, points: readonly ChartPoint[]): string =>
+const chartAriaLabel = (
+  label: string,
+  points: readonly ChartPoint[],
+  timeZone: ObservatoryTimezone,
+): string =>
   `${label}: ${points
-    .map(({ timestamp, value }) => `${timestamp}, ${integer.format(value)}`)
+    .map(
+      ({ timestamp, value }) =>
+        `${formatChartTimestamp(timestamp, timeZone)}, ${integer.format(value)}`,
+    )
     .join('; ')}`;
 
 const comparisonText = (metric: ReachMetricModel): string | null => {
@@ -108,6 +125,7 @@ const comparisonText = (metric: ReachMetricModel): string | null => {
 };
 
 function MetricSparkline({ metric }: { metric: ReachMetricModel }) {
+  const { timezone } = useTimezone();
   const points = cardSparklinePoints(metric);
   const coordinates = chartCoordinates(points, 120, 36, 3);
   if (points.length === 0) return null;
@@ -127,6 +145,7 @@ function MetricSparkline({ metric }: { metric: ReachMetricModel }) {
       aria-label={chartAriaLabel(
         `${metric.label} ${evidenceLabel(sparklineEvidenceKind)} sparkline`,
         points,
+        timezone,
       )}
     >
       {coordinates.length > 1 ? (
@@ -187,6 +206,7 @@ export function ReachMetricCards({ metrics }: { metrics: ReachMetricModel[] }) {
 }
 
 function SignalChart({ metric }: { metric: ReachMetricModel }) {
+  const { timezone } = useTimezone();
   const points = nonNullHistoryPoints(metric);
   if (points.length === 0) {
     return <p className="reach-dashboard__empty-state">Historical values are unavailable.</p>;
@@ -225,7 +245,7 @@ function SignalChart({ metric }: { metric: ReachMetricModel }) {
           className="reach-dashboard__history-chart"
           viewBox="0 0 960 240"
           role="img"
-          aria-label={chartAriaLabel(`${metric.label} history`, points)}
+          aria-label={chartAriaLabel(`${metric.label} history`, points, timezone)}
         >
           <g className="reach-dashboard__axis" aria-hidden="true">
             {yTicks.map((tick) => (
@@ -246,7 +266,10 @@ function SignalChart({ metric }: { metric: ReachMetricModel }) {
                   }
                   key={`x:${point.timestamp}`}
                 >
-                  {shortMonth.format(new Date(point.timestamp))}
+                  {new Intl.DateTimeFormat('en-US', {
+                    month: 'short',
+                    timeZone: timezone,
+                  }).format(new Date(point.timestamp))}
                 </text>
               );
             })}
@@ -299,7 +322,7 @@ function SignalChart({ metric }: { metric: ReachMetricModel }) {
         </svg>
         <figcaption className="reach-dashboard__history-caption">
           {endpoint
-            ? `${formatUtc(endpoint.timestamp)} · ${integer.format(endpoint.value)}`
+            ? `${formatTimestamp(endpoint.timestamp, timezone)} · ${integer.format(endpoint.value)}`
             : 'Unavailable'}
         </figcaption>
       </figure>
@@ -322,7 +345,7 @@ function SignalChart({ metric }: { metric: ReachMetricModel }) {
         <ol>
           {points.map((point) => (
             <li key={`${point.timestamp}:${point.value}`}>
-              <time dateTime={point.timestamp}>{formatUtc(point.timestamp)}</time>:{' '}
+              <time dateTime={point.timestamp}>{formatTimestamp(point.timestamp, timezone)}</time>:{' '}
               {integer.format(point.value)}
             </li>
           ))}
@@ -525,6 +548,7 @@ export function EvidenceHealthPanel({
   metrics: ReachMetricModel[];
 }) {
   const titleId = useId();
+  const { timezone } = useTimezone();
   const firstSource = overview.sources[0];
   const trafficCoverage = metrics
     .filter(({ key }) => key === 'github.views' || key === 'github.clones')
@@ -598,7 +622,7 @@ export function EvidenceHealthPanel({
                   <span>{formatDuration(freshnessLag)}</span>
                   <span className="reach-dashboard__health-detail">
                     {overview.freshness.lastSuccessfulAt
-                      ? `${formatUtc(overview.freshness.lastSuccessfulAt)} to ${formatUtc(overview.freshness.checkedAt)}`
+                      ? `${formatTimestamp(overview.freshness.lastSuccessfulAt, timezone)} to ${formatTimestamp(overview.freshness.checkedAt, timezone)}`
                       : null}
                   </span>
                 </>
@@ -624,6 +648,7 @@ export function CollectionActivityPanel({
   historyGeneratedAt?: string | null;
 }) {
   const titleId = useId();
+  const { timezone } = useTimezone();
   const sourceEvents = overview.sources.flatMap<CollectionEvent>((source) => {
     const events: CollectionEvent[] = [];
     if (source.lastAttemptAt) {
@@ -665,7 +690,7 @@ export function CollectionActivityPanel({
           {events.map((event) => (
             <li className="reach-dashboard__activity-row" key={`${event.label}:${event.timestamp}`}>
               <strong>{event.label}</strong>
-              <time dateTime={event.timestamp}>{formatUtc(event.timestamp)}</time>
+              <time dateTime={event.timestamp}>{formatTimestamp(event.timestamp, timezone)}</time>
             </li>
           ))}
         </ol>

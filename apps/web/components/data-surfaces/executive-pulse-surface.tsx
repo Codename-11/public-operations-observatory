@@ -17,7 +17,9 @@ import {
   type ExecutivePulseAttentionItem,
   type ExecutivePulseDecisionRow,
 } from '../../lib/executive-pulse-model';
+import { selectMetricChange } from '../../lib/data-surfaces';
 import { availabilityStatus } from './data-surface-shared';
+import styles from './executive-pulse-microcharts.module.css';
 import { WorkspaceCommandHeader } from './reach-command-header';
 
 const integer = new Intl.NumberFormat('en-US');
@@ -105,8 +107,134 @@ const uniqueEvidenceActions = (
   return Array.from(actions.values());
 };
 
+const SlopeChart = ({
+  label,
+  current,
+  previous,
+}: {
+  label: string;
+  current: number | null;
+  previous: number | null;
+}) => {
+  const state = current === null ? 'empty' : previous === null ? 'endpoint' : 'comparison';
+  const ariaLabel =
+    current === null
+      ? `${label} comparison unavailable`
+      : previous === null
+        ? `${label}, current ${integer.format(current)}; prior unavailable`
+        : `${label}, prior ${integer.format(previous)}, current ${integer.format(current)}`;
+  const rises = current !== null && previous !== null && current > previous;
+  const previousY = current === previous ? 21 : rises ? 30 : 12;
+  const currentY = current === previous ? 21 : rises ? 12 : 30;
+
+  return (
+    <svg
+      className={styles.metricChart}
+      viewBox="0 0 120 42"
+      role="img"
+      aria-label={ariaLabel}
+      data-chart-state={state}
+    >
+      <g aria-hidden="true">
+        <path className={styles.track} d="M8 34 H112" />
+        {state === 'comparison' ? (
+          <>
+            <path
+              className={styles.slopeLine}
+              d={`M14 ${previousY} L106 ${currentY}`}
+              pathLength="1"
+            />
+            <circle className={styles.priorPoint} cx="14" cy={previousY} r="3" />
+          </>
+        ) : null}
+        {current !== null ? (
+          <circle
+            className={styles.currentPoint}
+            cx="106"
+            cy={state === 'comparison' ? currentY : 21}
+            r="4"
+          />
+        ) : null}
+      </g>
+    </svg>
+  );
+};
+
+const CoverageChart = ({ observed, required }: { observed: number | null; required: number }) => {
+  const active = observed === null ? 0 : Math.min(Math.max(observed, 0), required);
+  const gap = 3;
+  const width = (120 - gap * (required - 1)) / required;
+
+  return (
+    <svg
+      className={styles.barChart}
+      viewBox="0 0 120 20"
+      role="img"
+      aria-label={
+        observed === null
+          ? `Traffic coverage unavailable; ${required} required days`
+          : `Traffic coverage, ${observed} of ${required} required days observed`
+      }
+      data-chart-state={observed === null ? 'empty' : 'coverage'}
+    >
+      <g aria-hidden="true">
+        {Array.from({ length: required }, (_, index) => {
+          const state = observed === null ? 'unavailable' : index < active ? 'active' : 'inactive';
+          return (
+            <rect
+              key={index}
+              className={state === 'active' ? styles.activeSegment : styles.segment}
+              data-segment-state={state}
+              x={index * (width + gap)}
+              y="4"
+              width={width}
+              height="12"
+              rx="2"
+            />
+          );
+        })}
+      </g>
+    </svg>
+  );
+};
+
+const FreshnessGauge = ({ overview }: { overview: OverviewReadModelV1 }) => {
+  const { checkedAt, lastSuccessfulAt, staleAfter } = overview.freshness;
+  const checked = Date.parse(checkedAt);
+  const successful = lastSuccessfulAt === null ? Number.NaN : Date.parse(lastSuccessfulAt);
+  const stale = staleAfter === null ? Number.NaN : Date.parse(staleAfter);
+  const lag = checked - successful;
+  const threshold = stale - successful;
+  const available = Number.isFinite(lag) && Number.isFinite(threshold) && lag >= 0 && threshold > 0;
+  const width = available ? Math.min(lag / threshold, 1) * 108 : 0;
+
+  return (
+    <svg
+      className={styles.barChart}
+      viewBox="0 0 120 20"
+      role="img"
+      aria-label={
+        available
+          ? `Collection freshness, ${compactDuration(lag).accessibleLabel} lag; stale threshold ${compactDuration(threshold).accessibleLabel}`
+          : 'Collection freshness threshold unavailable'
+      }
+      data-chart-state={available ? 'threshold' : 'empty'}
+    >
+      <g aria-hidden="true">
+        <rect className={styles.gaugeTrack} x="6" y="6" width="108" height="8" rx="4" />
+        {available ? (
+          <rect className={styles.gaugeFill} x="6" y="6" width={width} height="8" rx="4" />
+        ) : null}
+        <path className={styles.threshold} d="M114 3 V17" />
+      </g>
+    </svg>
+  );
+};
+
 export function ExecutivePulseSurface({ overview }: { overview: OverviewReadModelV1 }) {
   const model = buildExecutivePulseModel(overview);
+  const starsChange = selectMetricChange(overview, 'github.stars')?.change ?? null;
+  const issuesChange = selectMetricChange(overview, 'github.open_issues')?.change ?? null;
   const facts = [
     model.facts.stars,
     model.facts.openIssues,
@@ -193,6 +321,26 @@ export function ExecutivePulseSurface({ overview }: { overview: OverviewReadMode
                   textValue(fact.value)
                 )}
               </p>
+              {fact.key === 'stars' ? (
+                <SlopeChart
+                  label="Stars"
+                  current={starsChange?.current ?? null}
+                  previous={starsChange?.previous ?? null}
+                />
+              ) : fact.key === 'open-issues' ? (
+                <SlopeChart
+                  label="Open issues"
+                  current={issuesChange?.current ?? null}
+                  previous={issuesChange?.previous ?? null}
+                />
+              ) : fact.key === 'traffic-coverage' ? (
+                <CoverageChart
+                  observed={model.evidenceHealth.trafficObservedDays}
+                  required={model.evidenceHealth.trafficRequiredDays}
+                />
+              ) : (
+                <FreshnessGauge overview={overview} />
+              )}
               <p>{fact.detail}</p>
               {fact.evidenceUrl ? (
                 <EvidenceLink

@@ -37,7 +37,9 @@ describe('Observatory shell', () => {
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content');
     expect(screen.getAllByText('Hermes-Relay')).not.toHaveLength(0);
-    expect(screen.getByText('Current UTC observation window')).toBeInTheDocument();
+    expect(
+      screen.getByText('Current observation window · Eastern Time (EST/EDT)'),
+    ).toBeInTheDocument();
     expect(
       within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', {
         name: 'Executive pulse',
@@ -112,7 +114,9 @@ describe('Observatory shell', () => {
     navigationState.view = 'completed';
     try {
       shell();
-      expect(screen.getByText('Latest completed UTC week')).toBeInTheDocument();
+      expect(
+        screen.getByText('Latest completed week · Eastern Time (EST/EDT)'),
+      ).toBeInTheDocument();
     } finally {
       navigationState.view = null;
     }
@@ -123,6 +127,10 @@ describe('Observatory shell', () => {
     const navigation = screen.getByRole('navigation', { name: 'Primary' });
     expect(within(navigation).queryByText('Attention')).not.toBeInTheDocument();
     expect(within(navigation).getByText('Briefings')).toHaveAttribute('aria-disabled', 'true');
+    expect(within(navigation).getByRole('link', { name: 'Settings' })).toHaveAttribute(
+      'href',
+      '/projects/hermes-relay/settings',
+    );
     expect(within(navigation).getByRole('link', { name: 'Reach & acquisition' })).toHaveAttribute(
       'href',
       '/projects/hermes-relay/reach-acquisition',
@@ -141,7 +149,7 @@ describe('Observatory shell', () => {
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Close navigation' })).toHaveFocus();
     await user.tab({ shift: true });
-    expect(within(dialog).getByRole('link', { name: 'Delivery & sources' })).toHaveFocus();
+    expect(within(dialog).getByRole('link', { name: 'Settings' })).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveFocus();

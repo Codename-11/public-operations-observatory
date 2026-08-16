@@ -3,6 +3,8 @@
 import type { OverviewReadModelV1 } from '@public-operations-observatory/contracts';
 
 import { EvidenceSheet } from '../overview/evidence-sheet';
+import { useTimezone } from '../timezone/timezone-provider';
+import { timezoneAbbreviation } from '../../lib/timezone';
 import { formatDate } from './data-surface-shared';
 import { OverviewControls } from './overview-controls';
 
@@ -52,6 +54,7 @@ export function WorkspaceCommandHeader({
   showWindow = false,
 }: WorkspaceCommandHeaderProps) {
   const view = overview.view ?? 'completed';
+  const { timezone } = useTimezone();
   const freshness = collectionFreshness(overview);
   return (
     <header className={`reach-command${showWindow ? ' reach-command--window-visible' : ''}`}>
@@ -81,7 +84,8 @@ export function WorkspaceCommandHeader({
         <p>{description}</p>
         <p className="reach-command__window">
           {view === 'current' ? 'Current observation window' : 'Completed reporting window'} ·{' '}
-          {formatDate(overview.window.start)}–{formatDate(overview.window.end)} UTC, end exclusive
+          {formatDate(overview.window.start, timezone)}–{formatDate(overview.window.end, timezone)}{' '}
+          {timezoneAbbreviation(timezone, overview.window.start)}, end exclusive
         </p>
       </div>
     </header>

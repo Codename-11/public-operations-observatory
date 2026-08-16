@@ -1,0 +1,95 @@
+.page {
+  width: min(100%, 56rem);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 3rem);
+}
+
+.heading {
+  margin-bottom: 1.5rem;
+}
+
+.heading h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.05;
+}
+
+.heading > p:last-child,
+.card header p,
+.field p {
+  color: var(--text-secondary);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--signal);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.card {
+  overflow: visible;
+}
+
+.form {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 32rem;
+}
+
+.field label {
+  font-weight: 700;
+}
+
+.field select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 2.5rem 0 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  font: inherit;
+}
+
+.field p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 2.75rem;
+}
+
+.feedback {
+  margin: 0;
+  color: var(--positive);
+  font-weight: 600;
+}
+
+@media (max-width: 639px) {
+  .page {
+    padding: 1rem;
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions button {
+    width: 100%;
+  }
+}

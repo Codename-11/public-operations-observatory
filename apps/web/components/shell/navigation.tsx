@@ -29,7 +29,7 @@ const sections: { label: string; items: Item[] }[] = [
     label: 'Operations',
     items: [
       { label: 'Briefings', icon: BookOpenText },
-      { label: 'Settings', icon: Settings },
+      { label: 'Settings', icon: Settings, href: (key) => `/projects/${key}/settings` },
     ],
   },
 ];

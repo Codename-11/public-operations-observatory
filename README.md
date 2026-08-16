@@ -42,6 +42,12 @@ Briefings are written under `./out` by default. Without `--end`, the CLI uses th
 
 Historical context is served independently at `GET /api/v1/projects/:projectKey/history?period=180d`; it does not extend or alter the strict seven-day `OverviewReadModelV1` response. Star and open-issue points are reduced to calendar-month-end values, while views and clones expose only directly observed UTC-day records. Collection runs are classified as `snapshot` or `history_backfill`, and only snapshot runs contribute to operational freshness.
 
+## Operator web behavior
+
+Executive Pulse keeps its four exact fact values visible on the first frame and adds compact evidence visualizations for supported comparisons, directly observed traffic coverage, and collection freshness. These charts animate once as presentation enhancement, never fabricate intermediate history, and render their final state immediately when reduced motion is enabled.
+
+Project Settings provides a persisted display-timezone preference. Eastern Time (`America/New_York`) is the default and follows EST/EDT automatically; changing the preference converts displayed dates and timestamps only. Source timestamps and the reproducible Monday-to-Monday UTC reporting contract remain unchanged.
+
 ## Quality gates
 
 Until the first public release, development defaults to fast direct iteration on `main`: make the narrow change, run the checks proportional to the affected surface, commit, push, deploy the affected service, and smoke-test the real runtime. Pull requests, independent review loops, and the full gate below are release/high-risk tools, not requirements for every internal iteration.

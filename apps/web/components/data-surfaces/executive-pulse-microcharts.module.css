@@ -1,0 +1,106 @@
+.metricChart,
+.barChart {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 2.625rem;
+  margin-top: 0.5rem;
+  overflow: hidden;
+}
+
+.barChart {
+  height: 1.25rem;
+}
+
+.track {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+
+.slopeLine {
+  fill: none;
+  stroke: var(--signal);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 500ms ease-out forwards;
+}
+
+.priorPoint {
+  fill: var(--surface);
+  stroke: var(--text-muted);
+  stroke-width: 2;
+}
+
+.currentPoint,
+.activeSegment,
+.gaugeFill {
+  fill: var(--signal);
+}
+
+.currentPoint {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.segment,
+.gaugeTrack {
+  fill: var(--border-strong);
+}
+
+.activeSegment,
+.gaugeFill {
+  transform-box: fill-box;
+}
+
+.activeSegment {
+  transform-origin: center bottom;
+  animation: fill-segment 500ms ease-out forwards;
+}
+
+.gaugeFill {
+  transform-origin: left center;
+  animation: fill-gauge 500ms ease-out forwards;
+}
+
+.threshold {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fill-segment {
+  from {
+    transform: scaleY(0.2);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes fill-gauge {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slopeLine,
+  .activeSegment,
+  .gaugeFill {
+    animation: none;
+    stroke-dashoffset: 0;
+    transform: none;
+  }
+}

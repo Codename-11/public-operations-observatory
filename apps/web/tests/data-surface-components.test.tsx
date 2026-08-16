@@ -188,9 +188,9 @@ const overviewFixture = (): OverviewReadModelV1 => ({
 const forbidden = /conversion|attribution|unique visitors|weighted attention|caused|adoption/i;
 
 const expectWindowAndEvidence = () => {
-  expect(screen.getByText(/3 Aug 2026–10 Aug 2026 UTC, end exclusive/i)).toBeInTheDocument();
+  expect(screen.getByText(/2 Aug 2026–9 Aug 2026 EDT, end exclusive/i)).toBeInTheDocument();
   expect(
-    screen.getByText(/Completed reporting window.*compared with 27 Jul 2026–3 Aug 2026 UTC/i),
+    screen.getByText(/Completed reporting window.*compared with 26 Jul 2026–2 Aug 2026/i),
   ).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Completed week' })).toHaveAttribute(
     'aria-current',
@@ -234,23 +234,41 @@ describe('production data surfaces', () => {
     expect(starsValue?.querySelector('.executive-pulse__fact-number')).toHaveTextContent('120');
     expect(starsValue?.querySelector('.executive-pulse__fact-unit')).toHaveTextContent('count');
     expect(stars).toHaveTextContent('Prior 115 · change +5.');
+    expect(
+      within(stars).getByRole('img', { name: 'Stars, prior 115, current 120' }),
+    ).toHaveAttribute('data-chart-state', 'comparison');
     const issues = screen.getByRole('region', { name: 'Open issues fact' });
     expect(issues.querySelector('.executive-pulse__fact-value')).toHaveTextContent(/^8 count$/);
     expect(
       issues.querySelector('.executive-pulse__fact-value .executive-pulse__fact-number'),
     ).toHaveTextContent('8');
     expect(issues).toHaveTextContent('Prior 10 · change -2.');
+    expect(
+      within(issues).getByRole('img', { name: 'Open issues, prior 10, current 8' }),
+    ).toHaveAttribute('data-chart-state', 'comparison');
     const traffic = screen.getByRole('region', { name: 'Traffic coverage fact' });
     expect(traffic.querySelector('.executive-pulse__fact-value')).toHaveTextContent(/^7\/7 days$/);
     expect(traffic.querySelector('.executive-pulse__fact-number')).toHaveTextContent('7/7');
     expect(traffic).toHaveTextContent('7/7 observed days');
+    const coverageChart = within(traffic).getByRole('img', {
+      name: 'Traffic coverage, 7 of 7 required days observed',
+    });
+    expect(coverageChart.querySelectorAll('[data-segment-state]')).toHaveLength(7);
+    expect(coverageChart.querySelectorAll('[data-segment-state="active"]')).toHaveLength(7);
     const freshness = screen.getByRole('region', { name: 'Collection freshness fact' });
     expect(freshness.querySelector('.executive-pulse__fact-value')).toHaveTextContent(/^4 min$/);
     expect(freshness.querySelector('.executive-pulse__fact-number')).toHaveTextContent('4');
     expect(freshness.querySelector('.executive-pulse__fact-unit')).toHaveTextContent('min');
     expect(freshness).not.toHaveTextContent(/240,000|milliseconds/i);
+    expect(
+      within(freshness).getByRole('img', {
+        name: 'Collection freshness, 4 minutes lag; stale threshold 6 hours',
+      }),
+    ).toHaveAttribute('data-chart-state', 'threshold');
+    expect(factGrid.querySelectorAll('svg[role="img"]')).toHaveLength(4);
+    expect(factGrid.querySelector('[class*="ticker"], [class*="particle"]')).toBeNull();
 
-    const window = screen.getByText(/Completed reporting window · 3 Aug 2026–10 Aug 2026 UTC/i);
+    const window = screen.getByText(/Completed reporting window/i);
     expect(window).toHaveClass('reach-command__window');
     expect(window).toBeVisible();
 
@@ -303,6 +321,10 @@ describe('production data surfaces', () => {
       expect(freshnessValue).toHaveTextContent(new RegExp(`^${compactValue}$`));
       expect(within(freshness).getByLabelText(accessibleLabel)).toBeInTheDocument();
       expect(freshnessValue).not.toHaveTextContent(/sec|milliseconds/i);
+      expect(freshness).toHaveTextContent(
+        `${accessibleLabel} from last successful collection to freshness check.`,
+      );
+      expect(freshness).not.toHaveTextContent(/milliseconds/i);
       expect(freshnessValue?.querySelector('.magic-number-ticker, [class*="motion"]')).toBeNull();
     },
   );
@@ -311,7 +333,7 @@ describe('production data surfaces', () => {
     render(<ReachAcquisitionSurface overview={overviewFixture()} />);
 
     expect(screen.getByRole('heading', { name: 'Reach & acquisition' })).toBeInTheDocument();
-    expect(screen.getByText(/3 Aug 2026–10 Aug 2026 UTC, end exclusive/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 Aug 2026–9 Aug 2026 EDT, end exclusive/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Completed week' })).toHaveAttribute(
       'aria-current',
       'page',
@@ -509,6 +531,10 @@ describe('production data surfaces', () => {
     const stars = screen.getByRole('region', { name: 'Stars fact' });
     expect(stars.querySelector('.executive-pulse__fact-number')).toHaveTextContent('120');
     expect(stars).toHaveTextContent('Exact prior-period comparison unavailable.');
+    expect(
+      within(stars).getByRole('img', { name: 'Stars, current 120; prior unavailable' }),
+    ).toHaveAttribute('data-chart-state', 'endpoint');
+    expect(stars.querySelector('[class*="slopeLine"]')).toBeNull();
     const attention = screen.getByRole('heading', { name: 'Needs attention' }).closest('section');
     expect(attention).not.toBeNull();
     expect(within(attention!).getByText('4 items')).toBeInTheDocument();
@@ -571,6 +597,19 @@ describe('production data surfaces', () => {
     );
     expect(stars.querySelector('.magic-number-ticker, [class*="motion"]')).toBeNull();
     expect(stars).toHaveTextContent('Current value and exact comparison unavailable.');
+    expect(
+      within(stars).getByRole('img', { name: 'Stars comparison unavailable' }),
+    ).toHaveAttribute('data-chart-state', 'empty');
+    const traffic = screen.getByRole('region', { name: 'Traffic coverage fact' });
+    const trafficChart = within(traffic).getByRole('img', {
+      name: 'Traffic coverage unavailable; 7 required days',
+    });
+    expect(trafficChart.querySelectorAll('[data-segment-state="unavailable"]')).toHaveLength(7);
+    expect(trafficChart.querySelector('[data-segment-state="active"]')).toBeNull();
+    const freshness = screen.getByRole('region', { name: 'Collection freshness fact' });
+    expect(
+      within(freshness).getByRole('img', { name: 'Collection freshness threshold unavailable' }),
+    ).toHaveAttribute('data-chart-state', 'empty');
     expect(screen.getByText('2 items')).toBeInTheDocument();
     const health = screen.getByRole('heading', { name: 'Evidence health' }).closest('section');
     expect(health).not.toBeNull();

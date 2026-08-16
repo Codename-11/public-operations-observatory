@@ -5,6 +5,8 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Suspense, useState } from 'react';
 import { PrimaryNavigation } from './navigation';
+import { timezoneLabel } from '../../lib/timezone';
+import { useTimezone } from '../timezone/timezone-provider';
 
 export function ObservatoryShell({
   projectKey,
@@ -24,7 +26,9 @@ export function ObservatoryShell({
       ? 'Delivery & Sources'
       : reachSurface
         ? 'Reach & Acquisition'
-        : 'Executive Pulse';
+        : currentPath === `${projectRoot}/settings`
+          ? 'Settings'
+          : 'Executive Pulse';
   return (
     <TooltipProvider delayDuration={250}>
       <a className="skip-link" href="#main-content">
@@ -94,12 +98,13 @@ export function ObservatoryShell({
 }
 
 function SidebarFooter() {
+  const { timezone } = useTimezone();
   return (
     <footer className="sidebar-footer">
       <p>ⓘ &nbsp;Help &amp; Documentation ↗</p>
       <div>
         <span>© 2026 Public Operations Observatory</span>
-        <span>All times UTC</span>
+        <span>All times {timezoneLabel(timezone)}</span>
       </div>
     </footer>
   );
@@ -119,8 +124,12 @@ function ProjectSelector({ projectKey }: { projectKey: string }) {
 
 function ObservationViewLabel() {
   const completedView = useSearchParams()?.get('view') === 'completed';
+  const { timezone } = useTimezone();
+  const label = timezoneLabel(timezone);
   return (
-    <span>{completedView ? 'Latest completed UTC week' : 'Current UTC observation window'}</span>
+    <span>
+      {completedView ? `Latest completed week · ${label}` : `Current observation window · ${label}`}
+    </span>
   );
 }
 
